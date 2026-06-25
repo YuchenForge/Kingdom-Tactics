@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+/vendor/
+target/
+build/
+dist/
+.gradle/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production
+.env.*.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-workspace
+*.sublime-project
+.classpath
+.project
+.settings/
+
+# Build artifacts
+*.log
+*.jar
+*.class
+*.pyc
+__pycache__/
+
+# Coverage
+coverage/
+.nyc_output/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Package lock files (optional, but usually committed)
+# package-lock.json
+# pom.xml.versionsBackup
+
+# Test
+test-results/
+
+# Docs
+docs/
