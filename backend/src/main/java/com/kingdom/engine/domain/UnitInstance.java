@@ -92,6 +92,14 @@ public class UnitInstance {
     }
 
     /**
+     * Set unit position to (x, y)
+     */
+    public void setPosition(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    /**
      * Take damage. Minimum 1 damage always.
      */
     public void takeDamage(int damage) {

@@ -82,9 +82,24 @@ public class CombatEngine {
                     // Attack
                     handleAttack(unit, target, enemyBoardRef, ownBoard, events, tick);
                 } else if (target != null) {
-                    // Move toward target
-                    unit.moveToward(target.getX(), target.getY());
-                    events.add(CombatEvent.unitMoved(tick, unit.getId(), unit.getX(), unit.getY()));
+                    // Calculate the NEXT tile
+                    int nextX = unit.getX();
+                    int nextY = unit.getY();
+                    
+                    if (unit.getX() < target.getX()) nextX++;
+                    else if (unit.getX() > target.getX()) nextX--;
+                    
+                    if (unit.getY() < target.getY()) nextY++;
+                    else if (unit.getY() > target.getY()) nextY--;
+                    
+                    // Check if the destination is EMPTY on BOTH boards
+                    boolean isBlocked = playerBoard.isOccupied(nextX, nextY) || enemyBoard.isOccupied(nextX, nextY);
+                    
+                    // Apply the move if the tile is free
+                    if (!isBlocked && Board.isValidPosition(nextX, nextY)) {
+                        unit.setPosition(nextX, nextY);
+                        events.add(CombatEvent.unitMoved(tick, unit.getId(), unit.getX(), unit.getY()));
+                    }
                 }
 
                 unit.resetCooldown();

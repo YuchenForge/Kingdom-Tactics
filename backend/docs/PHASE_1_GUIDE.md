@@ -32,16 +32,16 @@ Phase 1 goal: Build a pure, deterministic, testable combat engine in Java with *
 1. **Complete CombatEngine**
    - [x] Refactor to pass both boards to methods (not just one board)
    - [x] Implement splash damage (Mage)
-   - [ ] Implement healing (Healer)
-   - [ ] Fix movement and pathfinding
-   - [ ] Handle Healer ally healing
-   - [ ] Keep damage calculation per player
+   - [x] Implement healing (Healer)
+   - [x] Fix movement and pathfinding
+   - [x] Handle Healer ally healing
+   - [x] Keep damage calculation per player
 
 2. **Add TargetSelector service**
-   - [ ] Ranger: lowest HP targeting
-   - [ ] Knight: nearest enemy targeting
-   - [ ] Mage/Healer: lowest HP ally targeting
-   - [ ] Tie-breaking by distance, HP, unit ID
+   - [x] Ranger: lowest HP targeting
+   - [x] Knight: nearest enemy targeting
+   - [x] Mage/Healer: lowest HP ally targeting
+   - [x] Tie-breaking by distance, HP, unit ID
 
 3. **Add comprehensive tests** (30+)
    - [ ] Scenario 1-15 from docs/combat-scenarios.md
