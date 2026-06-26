@@ -1,6 +1,8 @@
 package com.kingdom.engine.domain;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * Immutable record of a combat event.
@@ -20,6 +22,7 @@ public class CombatEvent {
     private final int tick;
     private final Map<String, Object> data;
 
+    // Immutability
     public CombatEvent(EventType type, int tick, Map<String, Object> data) {
         this.type = Objects.requireNonNull(type);
         this.tick = tick;

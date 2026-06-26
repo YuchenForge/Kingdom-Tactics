@@ -1,6 +1,9 @@
 package com.kingdom.engine.domain;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Immutable result of combat resolution.

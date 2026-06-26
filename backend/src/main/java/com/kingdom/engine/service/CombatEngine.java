@@ -21,12 +21,12 @@ import com.kingdom.engine.domain.UnitInstance;
  * - All RNG is seeded (deterministic)
  */
 public class CombatEngine {
-    private static final int MAX_TICKS = 160;
-    private static final int TICK_DURATION_MS = 250;
+    private static final int MAX_TICKS = 160; // 40 seconds * 4 ticks/sec
+    private static final int TICK_DURATION_MS = 250; // 250ms per tick
     private static final int MAX_COMBAT_SECONDS = 40;
 
     private final long seed;
-    private final Random rng;
+    private final Random rng; // Seeded for determinism
 
     public CombatEngine(long seed) {
         this.seed = seed;
@@ -80,7 +80,7 @@ public class CombatEngine {
 
                 if (target != null && unit.chebyshevDistance(target) <= unit.getRange()) {
                     // Attack
-                    handleAttack(unit, target, enemyBoardRef, events, tick);
+                    handleAttack(unit, target, enemyBoardRef, ownBoard, events, tick);
                 } else if (target != null) {
                     // Move toward target
                     unit.moveToward(target.getX(), target.getY());
@@ -140,15 +140,15 @@ public class CombatEngine {
                 || "Healer".equals(unitType)) {
 
             enemies.sort(
-                Comparator.comparingInt(UnitInstance::getCurrentHp)
-                    .thenComparingInt(enemy -> unit.manhattanDistance(enemy))
-                    .thenComparing(UnitInstance::getId)
+                Comparator.comparingInt(UnitInstance::getCurrentHp) // 1. Lowest HP
+                    .thenComparingInt(enemy -> unit.manhattanDistance(enemy)) // 2. Distance
+                    .thenComparing(UnitInstance::getId) // 3. ID tie-break
             );
         } else {
             enemies.sort(
-                Comparator.<UnitInstance>comparingInt(enemy -> unit.manhattanDistance(enemy))
-                    .thenComparingInt(UnitInstance::getCurrentHp)
-                    .thenComparing(UnitInstance::getId)
+                Comparator.<UnitInstance>comparingInt(enemy -> unit.manhattanDistance(enemy)) // 1. Distance
+                    .thenComparingInt(UnitInstance::getCurrentHp) // 2. Lowest HP
+                    .thenComparing(UnitInstance::getId) // 3. ID tie-break
             );
         }
 
@@ -159,8 +159,20 @@ public class CombatEngine {
      * Handle attack between attacker and target.
      * Includes splash damage for Mage.
      */
-    private void handleAttack(UnitInstance attacker, UnitInstance target, Board enemyBoard, List<CombatEvent> events, int tick) {
+    private void handleAttack(UnitInstance attacker, UnitInstance target, Board enemyBoard, Board ownBoard, List<CombatEvent> events, int tick) {
         attacker.incrementActionCounter();
+
+        // Healer special: every 3rd action is heal
+        if ("Healer".equals(attacker.getType()) && attacker.isTriggerSpecialAction()) {
+            // Find lowest HP ally in ownBoard within range 2
+            UnitInstance ally = findLowestHpAllyInRange(attacker, ownBoard, 2);
+            if (ally != null) {
+                int oldHP = ally.getCurrentHp();
+                ally.heal(5); 
+                events.add(CombatEvent.healed(tick, attacker.getId(), ally.getId(), ally.getCurrentHp() - oldHP));
+            }
+            return;
+        }
 
         // Calculate damage
         int baseDamage = Math.max(1, attacker.getAttack() - target.getArmor());
@@ -194,4 +206,22 @@ public class CombatEngine {
             }
         }
     }
+
+    /**
+     * Find lowest HP ally in ownBoard within range for unit
+     */
+    private UnitInstance findLowestHpAllyInRange(UnitInstance unit, Board ownBoard, int range) {
+        List<UnitInstance> allies = new ArrayList<>();
+        allies.addAll(ownBoard.getAliveUnits());
+        allies.sort(Comparator.comparingInt(UnitInstance::getCurrentHp)
+            .thenComparing(UnitInstance::getId));
+        
+        for (UnitInstance ally: allies) {
+            int distance = unit.chebyshevDistance(ally);
+            if (distance <= range) return ally;
+        }
+
+        return null;
+    }
+
 }

@@ -30,8 +30,8 @@ Phase 1 goal: Build a pure, deterministic, testable combat engine in Java with *
 ### ⏳ TODO
 
 1. **Complete CombatEngine**
-   - [ ] Refactor to pass both boards to methods (not just one board)
-   - [ ] Implement splash damage (Mage)
+   - [x] Refactor to pass both boards to methods (not just one board)
+   - [x] Implement splash damage (Mage)
    - [ ] Implement healing (Healer)
    - [ ] Fix movement and pathfinding
    - [ ] Handle Healer ally healing
