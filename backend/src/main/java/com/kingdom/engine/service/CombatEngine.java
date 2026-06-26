@@ -76,7 +76,7 @@ public class CombatEngine {
                 Board enemyBoardRef = containsUnit(playerBoard, unit) ? enemyBoard : playerBoard;
 
                 // Select target
-                UnitInstance target = selectTarget(unit, enemyBoardRef);
+                UnitInstance target = TargetSelector.selectTarget(unit, enemyBoardRef);
 
                 if (target != null && unit.chebyshevDistance(target) <= unit.getRange()) {
                     // Attack
@@ -138,39 +138,6 @@ public class CombatEngine {
     }
 
     /**
-     * Select target for a unit based on its type and special ability.
-     * Tie-breaking order: distance, HP, unit ID.
-     */
-    private UnitInstance selectTarget(UnitInstance unit, Board enemyBoard) {
-        List<UnitInstance> enemies = new ArrayList<>(enemyBoard.getAliveUnits());
-
-        if (enemies.isEmpty()) {
-            return null;
-        }
-
-        String unitType = unit.getType();
-
-        if ("Ranger".equals(unitType)
-                || "Mage".equals(unitType)
-                || "Healer".equals(unitType)) {
-
-            enemies.sort(
-                Comparator.comparingInt(UnitInstance::getCurrentHp) // 1. Lowest HP
-                    .thenComparingInt(enemy -> unit.manhattanDistance(enemy)) // 2. Distance
-                    .thenComparing(UnitInstance::getId) // 3. ID tie-break
-            );
-        } else {
-            enemies.sort(
-                Comparator.<UnitInstance>comparingInt(enemy -> unit.manhattanDistance(enemy)) // 1. Distance
-                    .thenComparingInt(UnitInstance::getCurrentHp) // 2. Lowest HP
-                    .thenComparing(UnitInstance::getId) // 3. ID tie-break
-            );
-        }
-
-        return enemies.get(0);
-    }
-
-    /**
      * Handle attack between attacker and target.
      * Includes splash damage for Mage.
      */
@@ -180,7 +147,7 @@ public class CombatEngine {
         // Healer special: every 3rd action is heal
         if ("Healer".equals(attacker.getType()) && attacker.isTriggerSpecialAction()) {
             // Find lowest HP ally in ownBoard within range 2
-            UnitInstance ally = findLowestHpAllyInRange(attacker, ownBoard, 2);
+            UnitInstance ally = TargetSelector.findLowestHpAllyInRange(attacker, ownBoard, 2);
             if (ally != null) {
                 int oldHP = ally.getCurrentHp();
                 ally.heal(5); 
@@ -221,22 +188,4 @@ public class CombatEngine {
             }
         }
     }
-
-    /**
-     * Find lowest HP ally in ownBoard within range for unit
-     */
-    private UnitInstance findLowestHpAllyInRange(UnitInstance unit, Board ownBoard, int range) {
-        List<UnitInstance> allies = new ArrayList<>();
-        allies.addAll(ownBoard.getAliveUnits());
-        allies.sort(Comparator.comparingInt(UnitInstance::getCurrentHp)
-            .thenComparing(UnitInstance::getId));
-        
-        for (UnitInstance ally: allies) {
-            int distance = unit.chebyshevDistance(ally);
-            if (distance <= range) return ally;
-        }
-
-        return null;
-    }
-
 }
