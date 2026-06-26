@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UnitInstance.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Kingdom Tactics</a> &gt; <a href="index.source.html" class="el_package">com.kingdom.engine.domain</a> &gt; <span class="el_source">UnitInstance.java</span></div><h1>UnitInstance.java</h1><pre class="source lang-java linenums">package com.kingdom.engine.domain;
+
+import java.util.Objects;
+
+/**
+ * A unit instance in combat.
+ * Mutable during combat (position, HP, cooldown change).
+ */
+public class UnitInstance {
+    private final String id;              // Unique unit ID (e.g., &quot;unit_001&quot;)
+    private final UnitDefinition definition;
+    private int currentHp;
+    private int x, y;                     // Position on board
+    private int cooldownTicks;            // Ticks until next action
+    private int actionCounter;            // For Mage (splash) and Healer (heal) every 3rd action
+    private boolean alive;
+
+    // Standard attack cooldown: 4 ticks = 1 second at 250ms per tick
+    public static final int INITIAL_COOLDOWN = 4;
+
+<span class="fc" id="L21">    public UnitInstance(String id, UnitDefinition definition, int x, int y) {</span>
+<span class="fc" id="L22">        this.id = Objects.requireNonNull(id);</span>
+<span class="fc" id="L23">        this.definition = Objects.requireNonNull(definition);</span>
+<span class="fc" id="L24">        this.currentHp = definition.getMaxHp();</span>
+<span class="fc" id="L25">        this.x = x;</span>
+<span class="fc" id="L26">        this.y = y;</span>
+<span class="fc" id="L27">        this.cooldownTicks = INITIAL_COOLDOWN;</span>
+<span class="fc" id="L28">        this.actionCounter = 0;</span>
+<span class="fc" id="L29">        this.alive = true;</span>
+<span class="fc" id="L30">    }</span>
+
+    // Getters
+<span class="fc" id="L33">    public String getId() { return id; }</span>
+<span class="nc" id="L34">    public UnitDefinition getDefinition() { return definition; }</span>
+<span class="fc" id="L35">    public int getCurrentHp() { return currentHp; }</span>
+<span class="fc" id="L36">    public int getX() { return x; }</span>
+<span class="fc" id="L37">    public int getY() { return y; }</span>
+<span class="nc" id="L38">    public int getCooldownTicks() { return cooldownTicks; }</span>
+<span class="nc" id="L39">    public int getActionCounter() { return actionCounter; }</span>
+<span class="fc" id="L40">    public boolean isAlive() { return alive; }</span>
+<span class="fc" id="L41">    public String getType() { return definition.getType(); }</span>
+<span class="nc" id="L42">    public int getMaxHp() { return definition.getMaxHp(); }</span>
+<span class="fc" id="L43">    public int getAttack() { return definition.getAttack(); }</span>
+<span class="fc" id="L44">    public int getRange() { return definition.getRange(); }</span>
+
+    /**
+     * Decrement cooldown by 1 tick.
+     */
+    public void decrementCooldown() {
+<span class="pc bpc" id="L50" title="1 of 2 branches missed.">        if (cooldownTicks &gt; 0) {</span>
+<span class="fc" id="L51">            cooldownTicks--;</span>
+        }
+<span class="fc" id="L53">    }</span>
+
+    /**
+     * Check if unit can act (cooldown is 0).
+     */
+    public boolean canAct() {
+<span class="pc bpc" id="L59" title="1 of 4 branches missed.">        return alive &amp;&amp; cooldownTicks == 0;</span>
+    }
+
+    /**
+     * Reset cooldown to initial value after acting.
+     */
+    public void resetCooldown() {
+<span class="fc" id="L66">        cooldownTicks = INITIAL_COOLDOWN;</span>
+<span class="fc" id="L67">    }</span>
+
+    /**
+     * Increment action counter. Used for Mage (splash) and Healer (heal) every 3rd action.
+     */
+    public void incrementActionCounter() {
+<span class="fc" id="L73">        actionCounter++;</span>
+<span class="fc" id="L74">    }</span>
+
+    /**
+     * Check if action counter is at a multiple of 3 (triggers special ability).
+     */
+    public boolean isTriggerSpecialAction() {
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        return actionCounter % 3 == 0;</span>
+    }
+
+    /**
+     * Move unit one tile toward target (greedy pathfinding by Manhattan distance).
+     */
+    public void moveToward(int targetX, int targetY) {
+<span class="fc bfc" id="L87" title="All 2 branches covered.">        if (x &lt; targetX) x++;</span>
+<span class="pc bpc" id="L88" title="1 of 2 branches missed.">        else if (x &gt; targetX) x--;</span>
+
+<span class="fc bfc" id="L90" title="All 2 branches covered.">        if (y &lt; targetY) y++;</span>
+<span class="fc bfc" id="L91" title="All 2 branches covered.">        else if (y &gt; targetY) y--;</span>
+<span class="fc" id="L92">    }</span>
+
+    /**
+     * Take damage. Minimum 1 damage always.
+     */
+    public void takeDamage(int damage) {
+<span class="fc" id="L98">        int actualDamage = Math.max(1, damage);</span>
+<span class="fc" id="L99">        currentHp -= actualDamage;</span>
+<span class="fc bfc" id="L100" title="All 2 branches covered.">        if (currentHp &lt;= 0) {</span>
+<span class="fc" id="L101">            currentHp = 0;</span>
+<span class="fc" id="L102">            alive = false;</span>
+        }
+<span class="fc" id="L104">    }</span>
+
+    /**
+     * Heal unit. Capped at max HP.
+     */
+    public void heal(int amount) {
+<span class="nc" id="L110">        currentHp = Math.min(currentHp + amount, definition.getMaxHp());</span>
+<span class="nc" id="L111">    }</span>
+
+    /**
+     * Chebyshev distance (max of |Δx| and |Δy|).
+     */
+    public int chebyshevDistance(UnitInstance other) {
+<span class="fc" id="L117">        return Math.max(Math.abs(this.x - other.x), Math.abs(this.y - other.y));</span>
+    }
+
+    /**
+     * Manhattan distance (|Δx| + |Δy|).
+     */
+    public int manhattanDistance(UnitInstance other) {
+<span class="nc" id="L124">        return Math.abs(this.x - other.x) + Math.abs(this.y - other.y);</span>
+    }
+
+    /**
+     * Get armor reduction (1 for Shieldbearer, 0 for others).
+     */
+    public int getArmor() {
+<span class="fc bfc" id="L131" title="All 2 branches covered.">        return &quot;Shieldbearer&quot;.equals(definition.getType()) ? 1 : 0;</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L136">        return String.format(&quot;%s(%s, HP:%d/%d, pos:(%d,%d), cd:%d)&quot;, </span>
+<span class="nc" id="L137">            id, definition.getType(), currentHp, definition.getMaxHp(), x, y, cooldownTicks);</span>
+    }
+
+    @Override
+    public boolean equals(Object o) {
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        if (this == o) return true;</span>
+<span class="nc bnc" id="L143" title="All 4 branches missed.">        if (o == null || getClass() != o.getClass()) return false;</span>
+<span class="nc" id="L144">        UnitInstance that = (UnitInstance) o;</span>
+<span class="nc" id="L145">        return Objects.equals(id, that.id);</span>
+    }
+
+    @Override
+    public int hashCode() {
+<span class="nc" id="L150">        return Objects.hash(id);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.10.202304240956</span></div></body></html>

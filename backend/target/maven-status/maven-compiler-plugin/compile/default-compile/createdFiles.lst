@@ -1,0 +1,7 @@
+com/kingdom/engine/domain/Board.class
+com/kingdom/engine/domain/CombatEvent$EventType.class
+com/kingdom/engine/service/CombatEngine.class
+com/kingdom/engine/domain/ResolutionResult.class
+com/kingdom/engine/domain/UnitInstance.class
+com/kingdom/engine/domain/UnitDefinition.class
+com/kingdom/engine/domain/CombatEvent.class

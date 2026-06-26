@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Board.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Kingdom Tactics</a> &gt; <a href="index.source.html" class="el_package">com.kingdom.engine.domain</a> &gt; <span class="el_source">Board.java</span></div><h1>Board.java</h1><pre class="source lang-java linenums">package com.kingdom.engine.domain;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Represents a 4x4 combat board.
+ * Tracks unit positions and provides queries.
+ */
+public class Board {
+    public static final int WIDTH = 4;
+    public static final int HEIGHT = 4;
+
+    private final Map&lt;String, UnitInstance&gt; unitMap;  // unitId -&gt; UnitInstance
+    private final int playerId;                         // 0 or 1 (for reference)
+
+<span class="fc" id="L17">    public Board(int playerId) {</span>
+<span class="fc" id="L18">        this.unitMap = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L19">        this.playerId = playerId;</span>
+<span class="fc" id="L20">    }</span>
+
+    /**
+     * Copy constructor for snapshots.
+     */
+<span class="fc" id="L25">    public Board(Board other) {</span>
+<span class="fc" id="L26">        this.playerId = other.playerId;</span>
+<span class="fc" id="L27">        this.unitMap = new HashMap&lt;&gt;(other.unitMap);</span>
+<span class="fc" id="L28">    }</span>
+
+    /**
+     * Add a unit to the board at given position.
+     */
+    public void addUnit(UnitInstance unit) {
+<span class="pc bpc" id="L34" title="1 of 2 branches missed.">        if (!isValidPosition(unit.getX(), unit.getY())) {</span>
+<span class="nc" id="L35">            throw new IllegalArgumentException(&quot;Invalid position: (&quot; + unit.getX() + &quot;, &quot; + unit.getY() + &quot;)&quot;);</span>
+        }
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">        if (unitMap.containsKey(unit.getId())) {</span>
+<span class="nc" id="L38">            throw new IllegalArgumentException(&quot;Unit already on board: &quot; + unit.getId());</span>
+        }
+<span class="fc" id="L40">        unitMap.put(unit.getId(), unit);</span>
+<span class="fc" id="L41">    }</span>
+
+    /**
+     * Remove a unit from the board.
+     */
+    public void removeUnit(String unitId) {
+<span class="nc" id="L47">        unitMap.remove(unitId);</span>
+<span class="nc" id="L48">    }</span>
+
+    /**
+     * Get all units on the board.
+     */
+    public List&lt;UnitInstance&gt; getAllUnits() {
+<span class="fc" id="L54">        return new ArrayList&lt;&gt;(unitMap.values());</span>
+    }
+
+    /**
+     * Get alive units sorted by ID (deterministic order).
+     */
+    public List&lt;UnitInstance&gt; getAliveUnits() {
+<span class="fc" id="L61">        return getAllUnits().stream()</span>
+<span class="fc" id="L62">            .filter(UnitInstance::isAlive)</span>
+<span class="fc" id="L63">            .sorted(Comparator.comparing(UnitInstance::getId))</span>
+<span class="fc" id="L64">            .collect(Collectors.toList());</span>
+    }
+
+    /**
+     * Get dead units.
+     */
+    public List&lt;UnitInstance&gt; getDeadUnits() {
+<span class="nc" id="L71">        return getAllUnits().stream()</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">            .filter(u -&gt; !u.isAlive())</span>
+<span class="nc" id="L73">            .collect(Collectors.toList());</span>
+    }
+
+    /**
+     * Get a unit by ID.
+     */
+    public UnitInstance getUnit(String unitId) {
+<span class="fc" id="L80">        return unitMap.get(unitId);</span>
+    }
+
+    /**
+     * Check if position is occupied.
+     */
+    public boolean isOccupied(int x, int y) {
+<span class="nc" id="L87">        return unitMap.values().stream()</span>
+<span class="nc bnc" id="L88" title="All 6 branches missed.">            .anyMatch(u -&gt; u.getX() == x &amp;&amp; u.getY() == y &amp;&amp; u.isAlive());</span>
+    }
+
+    /**
+     * Get unit at position (if any).
+     */
+    public UnitInstance getUnitAt(int x, int y) {
+<span class="nc" id="L95">        return unitMap.values().stream()</span>
+<span class="nc bnc" id="L96" title="All 6 branches missed.">            .filter(u -&gt; u.getX() == x &amp;&amp; u.getY() == y &amp;&amp; u.isAlive())</span>
+<span class="nc" id="L97">            .findFirst()</span>
+<span class="nc" id="L98">            .orElse(null);</span>
+    }
+
+    /**
+     * Get enemies of a unit (all alive units not in unitMap).
+     * This assumes we have access to both boards during combat (passed as parameter).
+     */
+    public List&lt;UnitInstance&gt; getEnemiesInRange(UnitInstance unit, Board enemyBoard) {
+<span class="nc" id="L106">        return enemyBoard.getAliveUnits().stream()</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">            .filter(enemy -&gt; unit.chebyshevDistance(enemy) &lt;= unit.getRange())</span>
+<span class="nc" id="L108">            .collect(Collectors.toList());</span>
+    }
+
+    /**
+     * Remove all dead units.
+     */
+    public void removeDead() {
+<span class="fc bfc" id="L115" title="All 2 branches covered.">        unitMap.values().removeIf(u -&gt; !u.isAlive());</span>
+<span class="fc" id="L116">    }</span>
+
+    /**
+     * Check if board is empty (no alive units).
+     */
+    public boolean isEmpty() {
+<span class="fc" id="L122">        return getAliveUnits().isEmpty();</span>
+    }
+
+    /**
+     * Get total HP of alive units.
+     */
+    public int getTotalHp() {
+<span class="fc" id="L129">        return getAliveUnits().stream()</span>
+<span class="fc" id="L130">            .mapToInt(UnitInstance::getCurrentHp)</span>
+<span class="fc" id="L131">            .sum();</span>
+    }
+
+    /**
+     * Validate board position.
+     */
+    public static boolean isValidPosition(int x, int y) {
+<span class="pc bpc" id="L138" title="4 of 8 branches missed.">        return x &gt;= 0 &amp;&amp; x &lt; WIDTH &amp;&amp; y &gt;= 0 &amp;&amp; y &lt; HEIGHT;</span>
+    }
+
+    /**
+     * Get unit count.
+     */
+    public int getUnitCount() {
+<span class="fc" id="L145">        return getAliveUnits().size();</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L150">        return String.format(&quot;Board(player:%d, units:%d)&quot;, playerId, getUnitCount());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.10.202304240956</span></div></body></html>
