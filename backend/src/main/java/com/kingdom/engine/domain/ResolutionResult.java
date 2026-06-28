@@ -11,39 +11,64 @@ import java.util.Objects;
  */
 public class ResolutionResult {
     private final List<CombatEvent> events;
-    private final Board finalBoard;
+    private final CombatBoard finalBoard;
     private final int keepDamage;
     private final int finalTick;
     private final String endReason;
+    private final int winnerPlayerId;
 
-    public ResolutionResult(List<CombatEvent> events, Board finalBoard, int keepDamage, int finalTick, String endReason) {
+    public ResolutionResult(
+            List<CombatEvent> events,
+            CombatBoard finalBoard,
+            int keepDamage,
+            int finalTick,
+            String endReason,
+            int winnerPlayerId) {
         this.events = Collections.unmodifiableList(new ArrayList<>(events));
-        this.finalBoard = new Board(finalBoard);  // Defensive copy
+        this.finalBoard = new CombatBoard(finalBoard);
         this.keepDamage = keepDamage;
         this.finalTick = finalTick;
         this.endReason = Objects.requireNonNull(endReason);
+        this.winnerPlayerId = winnerPlayerId;
     }
 
-    // Getters
-    public List<CombatEvent> getEvents() { return events; }
-    public Board getFinalBoard() { return new Board(finalBoard); }
-    public int getKeepDamage() { return keepDamage; }
-    public int getFinalTick() { return finalTick; }
-    public String getEndReason() { return endReason; }
+    public List<CombatEvent> getEvents() {
+        return events;
+    }
+
+    public CombatBoard getFinalBoard() {
+        return new CombatBoard(finalBoard);
+    }
+
+    public int getKeepDamage() {
+        return keepDamage;
+    }
+
+    public int getFinalTick() {
+        return finalTick;
+    }
+
+    public String getEndReason() {
+        return endReason;
+    }
+
+    public int getWinnerPlayerId() {
+        return winnerPlayerId;
+    }
 
     /**
-     * Calculate Keep damage based on formula:
      * damage = 1 + survivor_count + floor(total_hp / 10)
      */
-    public static int calculateKeepDamage(Board survivingBoard) {
-        int unitCount = survivingBoard.getUnitCount();
-        int totalHp = survivingBoard.getTotalHp();
+    public static int calculateKeepDamage(CombatBoard board, int winnerPlayerId) {
+        int unitCount = board.getUnitCountForPlayer(winnerPlayerId);
+        int totalHp = board.getTotalHpForPlayer(winnerPlayerId);
         return 1 + unitCount + (totalHp / 10);
     }
 
     @Override
     public String toString() {
-        return String.format("ResolutionResult(ticks:%d, events:%d, keepDamage:%d, reason:%s)", 
-            finalTick, events.size(), keepDamage, endReason);
+        return String.format(
+            "ResolutionResult(ticks:%d, events:%d, keepDamage:%d, reason:%s, winner:%d)",
+            finalTick, events.size(), keepDamage, endReason, winnerPlayerId);
     }
 }

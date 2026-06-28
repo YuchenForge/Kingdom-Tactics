@@ -8,8 +8,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Represents a 4x4 combat board.
- * Tracks unit positions and provides queries.
+ * Represents a player's 4×4 placement board during the planning phase.
+ * Units use local coordinates (x, y ∈ 0..3) and may occupy any cell on the board.
+ * At combat start, two placement boards merge into a 4×8 {@link CombatBoard};
+ * after combat, surviving units split back to their owner's placement board.
  */
 public class Board {
     public static final int WIDTH = 4;
@@ -147,6 +149,10 @@ public class Board {
      */
     public int getUnitCount() {
         return getAliveUnits().size();
+    }
+
+    public int getPlayerId() {
+        return playerId;
     }
 
     @Override

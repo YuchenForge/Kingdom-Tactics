@@ -37,7 +37,10 @@ You can hand the rules document and architecture guide to another developer, and
 **Domain models** (Java, no Spring/JPA/frameworks):
 - `GameState` — Entire game snapshot
 - `PlayerState` — One player's state
-- `Board` — 4×4 grid representation
+- `Board` — 4×4 placement board (local coordinates)
+- `CombatBoard` — 4×8 merged combat board (global coordinates, stacked vertically)
+- `HoldingLane` — 5-slot holding lane for purchased units
+- `Coordinates` — Local ↔ global coordinate mapping
 - `UnitInstance` — An instantiated unit with HP, position, cooldown
 - `UnitDefinition` — Unit stats (HP, ATK, RNG, special ability)
 - `CombatEvent` — UNIT_MOVED, ATTACK, UNIT_DIED, HEALED, etc.
@@ -179,19 +182,18 @@ Two users can create and join a game and retrieve a valid PREPARATION-phase snap
 - Refresh costs 1 gold
 
 **Command processing**:
-- `BUY_UNIT(shopSlot)` — Check gold, deduct, add to bench
+- `BUY_UNIT(shopSlot)` — Check gold, deduct, add to holding lane (max 5)
 - `SELL_UNIT(unitId)` — Remove, refund gold
 - `REFRESH_SHOP()` — Generate new offers (1 gold cost)
-- `PLACE_UNIT(unitId, x, y)` — Move from bench to board (planning zone only)
-- `MOVE_UNIT(unitId, x, y)` — Move on board (planning zone only)
+- `PLACE_UNIT(unitId, x, y)` — Move from lane to placement board (any empty cell, local coords)
+- `MOVE_UNIT(unitId, x, y)` — Move on placement board (any empty cell, local coords)
 - `LOCK_BOARD()` — Submit final plan
 
 **Command validation**:
 - Gold checks (can afford?)
-- Board bounds (x, y in 0..3?)
+- Board bounds (x, y in 0..3)
 - Unit ownership (is it your unit?)
-- Capacity checks (not exceeding unit cap?)
-- Planning zone (can only place in rows 0-1?)
+- Capacity checks (not exceeding unit cap or lane size)
 
 **Idempotency keys**:
 - UUID in request header
@@ -201,8 +203,8 @@ Two users can create and join a game and retrieve a valid PREPARATION-phase snap
 ### Tests
 
 - Cannot buy without gold
-- Cannot place outside planning zone
-- Cannot exceed unit cap
+- Cannot place outside board bounds
+- Cannot exceed unit cap or lane capacity
 - Duplicate request does not duplicate purchase
 - Opponent cannot view shop or pending plans
 - Locked board cannot be modified
@@ -296,9 +298,10 @@ A complete 8-round match can run via API with worker resolution. Full match is r
 - Replay page (step through events)
 
 **Game board component**:
-- 4×4 CSS Grid for each player
+- 4×4 CSS Grid placement board per player (local coordinates)
 - Shop display (5 unit cards)
-- Bench display (off-board units)
+- 5-slot holding lane per player
+- 4×8 merged combat board for replay (global coordinates, stacked vertically)
 - Gold and Keep HP counters
 - "Lock board" button
 - Action confirmation (buy, place, sell)

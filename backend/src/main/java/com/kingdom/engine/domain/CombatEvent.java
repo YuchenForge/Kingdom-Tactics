@@ -37,23 +37,25 @@ public class CombatEvent {
     /**
      * Factory method for UNIT_PLACED event.
      */
-    public static CombatEvent unitPlaced(int tick, String unitId, String unitType, int x, int y) {
+    public static CombatEvent unitPlaced(int tick, String unitId, String unitType, int x, int y, int playerId) {
         Map<String, Object> data = new HashMap<>();
         data.put("unitId", unitId);
         data.put("unitType", unitType);
         data.put("x", x);
         data.put("y", y);
+        data.put("playerId", playerId);
         return new CombatEvent(EventType.UNIT_PLACED, tick, data);
     }
 
     /**
      * Factory method for UNIT_MOVED event.
      */
-    public static CombatEvent unitMoved(int tick, String unitId, int x, int y) {
+    public static CombatEvent unitMoved(int tick, String unitId, int x, int y, int playerId) {
         Map<String, Object> data = new HashMap<>();
         data.put("unitId", unitId);
         data.put("x", x);
         data.put("y", y);
+        data.put("playerId", playerId);
         return new CombatEvent(EventType.UNIT_MOVED, tick, data);
     }
 

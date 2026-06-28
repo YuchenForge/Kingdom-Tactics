@@ -10,7 +10,8 @@ public class UnitInstance {
     private final String id;              // Unique unit ID (e.g., "unit_001")
     private final UnitDefinition definition;
     private int currentHp;
-    private int x, y;                     // Position on board
+    private int x, y;                     // Local placement or global combat position
+    private Integer playerId;             // Set on merged combat board (0 or 1)
     private int cooldownTicks;            // Ticks until next action
     private int actionCounter;            // For Mage (splash) and Healer (heal) every 3rd action
     private boolean alive;
@@ -42,6 +43,30 @@ public class UnitInstance {
     public int getMaxHp() { return definition.getMaxHp(); }
     public int getAttack() { return definition.getAttack(); }
     public int getRange() { return definition.getRange(); }
+    public Integer getPlayerId() { return playerId; }
+
+    public void setPlayerId(int playerId) {
+        if (playerId != 0 && playerId != 1) {
+            throw new IllegalArgumentException("playerId must be 0 or 1: " + playerId);
+        }
+        this.playerId = playerId;
+    }
+
+    void setCurrentHp(int currentHp) {
+        this.currentHp = currentHp;
+    }
+
+    void setCooldownTicks(int cooldownTicks) {
+        this.cooldownTicks = cooldownTicks;
+    }
+
+    void setActionCounter(int actionCounter) {
+        this.actionCounter = actionCounter;
+    }
+
+    void setAlive(boolean alive) {
+        this.alive = alive;
+    }
 
     /**
      * Decrement cooldown by 1 tick.

@@ -4,26 +4,19 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-import com.kingdom.engine.domain.Board;
 import com.kingdom.engine.domain.UnitInstance;
 
 /**
  * Pure utility for selecting combat targets.
- * All targeting rules and tie-breakers are centralized here.
  */
 public class TargetSelector {
     private TargetSelector() {
-        // Utility class - prevent instantiation
     }
 
-    /**
-     * Select target for a unit based on its type and special ability.
-     * Tie-breaking order: distance, HP, unit ID.
-     */
-    public static UnitInstance selectTarget(UnitInstance unit, Board enemyBoard) {
-        List<UnitInstance> enemies = new ArrayList<>(enemyBoard.getAliveUnits());
+  public static UnitInstance selectTarget(UnitInstance unit, List<UnitInstance> enemies) {
+        List<UnitInstance> candidates = new ArrayList<>(enemies);
 
-        if (enemies.isEmpty()) {
+        if (candidates.isEmpty()) {
             return null;
         }
 
@@ -32,35 +25,30 @@ public class TargetSelector {
         if ("Ranger".equals(unitType)
                 || "Mage".equals(unitType)
                 || "Healer".equals(unitType)) {
-
-            enemies.sort(
-                Comparator.comparingInt(UnitInstance::getCurrentHp) // 1. Lowest HP
-                    .thenComparingInt(enemy -> unit.manhattanDistance(enemy)) // 2. Distance
-                    .thenComparing(UnitInstance::getId) // 3. ID tie-break
-            );
+            candidates.sort(
+                Comparator.comparingInt(UnitInstance::getCurrentHp)
+                    .thenComparingInt(enemy -> unit.manhattanDistance(enemy))
+                    .thenComparing(UnitInstance::getId));
         } else {
-            enemies.sort(
-                Comparator.<UnitInstance>comparingInt(enemy -> unit.manhattanDistance(enemy)) // 1. Distance
-                    .thenComparingInt(UnitInstance::getCurrentHp) // 2. Lowest HP
-                    .thenComparing(UnitInstance::getId) // 3. ID tie-break
-            );
+            candidates.sort(
+                Comparator.<UnitInstance>comparingInt(enemy -> unit.manhattanDistance(enemy))
+                    .thenComparingInt(UnitInstance::getCurrentHp)
+                    .thenComparing(UnitInstance::getId));
         }
 
-        return enemies.get(0);
+        return candidates.get(0);
     }
 
-    /**
-     * Find lowest HP ally in ownBoard within range for unit
-     */
-    public static UnitInstance findLowestHpAllyInRange(UnitInstance unit, Board ownBoard, int range) {
-        List<UnitInstance> allies = new ArrayList<>();
-        allies.addAll(ownBoard.getAliveUnits());
-        allies.sort(Comparator.comparingInt(UnitInstance::getCurrentHp)
+    public static UnitInstance findLowestHpAllyInRange(
+            UnitInstance unit, List<UnitInstance> allies, int range) {
+        List<UnitInstance> sortedAllies = new ArrayList<>(allies);
+        sortedAllies.sort(Comparator.comparingInt(UnitInstance::getCurrentHp)
             .thenComparing(UnitInstance::getId));
-        
-        for (UnitInstance ally: allies) {
-            int distance = unit.chebyshevDistance(ally);
-            if (distance <= range) return ally;
+
+        for (UnitInstance ally : sortedAllies) {
+            if (unit.chebyshevDistance(ally) <= range) {
+                return ally;
+            }
         }
 
         return null;

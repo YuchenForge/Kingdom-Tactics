@@ -169,7 +169,8 @@ See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines on commits, PRs, c
 
 - **Players:** 2
 - **Match length:** up to 8 rounds
-- **Board:** 4×4 grid per player
+- **Board:** 4×4 placement grid per player; merges into 4×8 combat board (stacked vertically)
+- **Holding lane:** 5 slots per player for shop purchases before placement
 - **Starting HP:** 20 per Keep
 - **Starting gold:** 10
 - **Units:** Squire, Shieldbearer, Ranger, Knight, Mage, Healer
