@@ -9,7 +9,8 @@ import java.util.stream.Collectors;
 
 /**
  * Merged 4×8 combat board formed by stacking two placement boards vertically.
- * Exists only during combat resolution; splits back into placement boards when the round ends.
+ * Exists only during combat resolution. Placement boards are restored separately
+ * after the round ends.
  */
 public class CombatBoard {
     public static final int WIDTH = Coordinates.COMBAT_WIDTH;
@@ -34,37 +35,13 @@ public class CombatBoard {
 
     /**
      * Merge two placement boards into a single combat board using global coordinates.
+     * Every unit enters combat at full HP regardless of prior state.
      */
     public static CombatBoard merge(Board player0Board, Board player1Board) {
         CombatBoard combatBoard = new CombatBoard();
         combatBoard.addUnitsFromPlacementBoard(player0Board, 0);
         combatBoard.addUnitsFromPlacementBoard(player1Board, 1);
         return combatBoard;
-    }
-
-    /**
-     * Split combat board back into two placement boards for the next planning phase.
-     * Only surviving units are included, converted to local coordinates.
-     */
-    public Board[] splitToPlacementBoards() {
-        Board player0Board = new Board(0);
-        Board player1Board = new Board(1);
-
-        for (UnitInstance unit : getAliveUnits()) {
-            int playerId = unit.getPlayerId();
-            int localX = Coordinates.toLocalX(unit.getX(), playerId);
-            int localY = Coordinates.toLocalY(unit.getY(), playerId);
-
-            UnitInstance placementUnit = copyForPlacement(unit, localX, localY);
-
-            if (playerId == 0) {
-                player0Board.addUnit(placementUnit);
-            } else {
-                player1Board.addUnit(placementUnit);
-            }
-        }
-
-        return new Board[] { player0Board, player1Board };
     }
 
     private void addUnitsFromPlacementBoard(Board placementBoard, int playerId) {
@@ -75,11 +52,15 @@ public class CombatBoard {
         for (UnitInstance unit : placementBoard.getAllUnits()) {
             int combatX = Coordinates.toCombatX(unit.getX(), playerId);
             int combatY = Coordinates.toCombatY(unit.getY(), playerId);
-            UnitInstance combatUnit = copyUnit(unit);
-            combatUnit.setPosition(combatX, combatY);
-            combatUnit.setPlayerId(playerId);
+            UnitInstance combatUnit = copyForCombat(unit, combatX, combatY, playerId);
             addUnit(combatUnit);
         }
+    }
+
+    private static UnitInstance copyForCombat(UnitInstance unit, int combatX, int combatY, int playerId) {
+        UnitInstance copy = new UnitInstance(unit.getId(), unit.getDefinition(), combatX, combatY);
+        copy.setPlayerId(playerId);
+        return copy;
     }
 
     private static UnitInstance copyUnit(UnitInstance unit) {
@@ -91,15 +72,6 @@ public class CombatBoard {
         if (unit.getPlayerId() != null) {
             copy.setPlayerId(unit.getPlayerId());
         }
-        return copy;
-    }
-
-    private static UnitInstance copyForPlacement(UnitInstance unit, int localX, int localY) {
-        UnitInstance copy = new UnitInstance(unit.getId(), unit.getDefinition(), localX, localY);
-        copy.setCurrentHp(unit.getCurrentHp());
-        copy.setCooldownTicks(UnitInstance.INITIAL_COOLDOWN);
-        copy.setActionCounter(0);
-        copy.setAlive(true);
         return copy;
     }
 

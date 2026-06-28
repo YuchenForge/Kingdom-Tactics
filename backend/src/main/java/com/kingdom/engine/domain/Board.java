@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
  * Represents a player's 4×4 placement board during the planning phase.
  * Units use local coordinates (x, y ∈ 0..3) and may occupy any cell on the board.
  * At combat start, two placement boards merge into a 4×8 {@link CombatBoard};
- * after combat, surviving units split back to their owner's placement board.
+ * after combat, all locked units return to placement boards at full HP for the next round.
  */
 public class Board {
     public static final int WIDTH = 4;
@@ -153,6 +153,32 @@ public class Board {
 
     public int getPlayerId() {
         return playerId;
+    }
+
+    /**
+     * Copy this locked board for the next planning round.
+     * All units return at their locked positions with full HP, regardless of combat outcome.
+     */
+    public Board copyForNextRound() {
+        Board next = new Board(playerId);
+        for (UnitInstance unit : getAllUnits()) {
+            next.addUnit(copyAtFullHp(unit));
+        }
+        return next;
+    }
+
+    /**
+     * Restore both players' locked formations for the next planning round.
+     */
+    public static Board[] boardsForNextRound(Board player0Board, Board player1Board) {
+        return new Board[] {
+            player0Board.copyForNextRound(),
+            player1Board.copyForNextRound()
+        };
+    }
+
+    private static UnitInstance copyAtFullHp(UnitInstance unit) {
+        return new UnitInstance(unit.getId(), unit.getDefinition(), unit.getX(), unit.getY());
     }
 
     @Override
