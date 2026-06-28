@@ -30,8 +30,9 @@ class CombatEngineTest {
         ResolutionResult result = engine.resolve(playerBoard, enemyBoard);
 
         assertThat(result.getEvents()).isNotEmpty();
-        assertThat(result.getKeepDamage()).isEqualTo(2);
-        assertThat(result.getWinnerPlayerId()).isEqualTo(0);
+        assertThat(result.getKeepDamage()).isEqualTo(1);
+        assertThat(result.getFinalBoard().getUnitCountForPlayer(0)).isZero();
+        assertThat(result.getFinalBoard().getUnitCountForPlayer(1)).isZero();
     }
 
     @Test
@@ -60,10 +61,8 @@ class CombatEngineTest {
 
         // Ranger stays on back row; both enemies are within Chebyshev range 3
         UnitInstance ranger = new UnitInstance("unit_001", UnitDefinition.ranger(), 1, 3);
-        // Shieldbearer (16 HP) and Squire (8 HP) stand in for the doc's two Squires at 8 vs 6 HP.
-        // CombatBoard.merge() resets all units to full HP, so pre-combat takeDamage() has no effect.
-        UnitInstance highHpEnemy = new UnitInstance("unit_002", UnitDefinition.shieldbearer(), 0, 1);
-        UnitInstance lowHpEnemy = new UnitInstance("unit_003", UnitDefinition.squire(), 1, 1);
+        UnitInstance highHpEnemy = new UnitInstance("unit_002", UnitDefinition.shieldbearer(), 0, 2);
+        UnitInstance lowHpEnemy = new UnitInstance("unit_003", UnitDefinition.squire(), 1, 2);
 
         playerBoard.addUnit(ranger);
         enemyBoard.addUnit(highHpEnemy);

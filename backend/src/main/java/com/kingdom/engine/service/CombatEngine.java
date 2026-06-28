@@ -2,8 +2,10 @@ package com.kingdom.engine.service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 import com.kingdom.engine.domain.Board;
 import com.kingdom.engine.domain.CombatBoard;
@@ -59,8 +61,15 @@ public class CombatEngine {
             List<UnitInstance> allUnits = new ArrayList<>(combatBoard.getAliveUnits());
             allUnits.sort(Comparator.comparing(UnitInstance::getId));
 
+            Set<String> scheduledActors = new HashSet<>();
             for (UnitInstance unit : allUnits) {
-                if (!unit.isAlive() || !unit.canAct()) {
+                if (unit.isAlive() && unit.canAct()) {
+                    scheduledActors.add(unit.getId());
+                }
+            }
+
+            for (UnitInstance unit : allUnits) {
+                if (!scheduledActors.contains(unit.getId())) {
                     continue;
                 }
 
@@ -71,30 +80,12 @@ public class CombatEngine {
 
                 UnitInstance target = TargetSelector.selectTarget(unit, enemies);
 
-                if (target != null && unit.chebyshevDistance(target) <= unit.getRange()) {
+                if ("Healer".equals(unit.getType()) && unit.willTriggerSpecialOnNextAttack()) {
+                    handleHealerHeal(unit, allies, events, tick);
+                } else if (target != null && unit.chebyshevDistance(target) <= unit.getRange()) {
                     handleAttack(unit, target, combatBoard, allies, events, tick);
-                } else if (target != null) {
-                    int nextX = unit.getX();
-                    int nextY = unit.getY();
-
-                    if (unit.getX() < target.getX()) {
-                        nextX++;
-                    } else if (unit.getX() > target.getX()) {
-                        nextX--;
-                    }
-
-                    if (unit.getY() < target.getY()) {
-                        nextY++;
-                    } else if (unit.getY() > target.getY()) {
-                        nextY--;
-                    }
-
-                    if (!combatBoard.isOccupied(nextX, nextY)
-                            && CombatBoard.isValidPosition(nextX, nextY)) {
-                        unit.setPosition(nextX, nextY);
-                        events.add(CombatEvent.unitMoved(
-                            tick, unit.getId(), unit.getX(), unit.getY(), unit.getPlayerId()));
-                    }
+                } else if (target != null && unit.isAlive()) {
+                    moveOneOrthogonalStep(unit, target, combatBoard, events, tick);
                 }
 
                 unit.resetCooldown();
@@ -153,6 +144,56 @@ public class CombatEngine {
         return 0;
     }
 
+    /**
+     * Move one orthogonal tile (N/S/E/W) toward the target.
+     * When diagonal, prefers the axis with larger |delta|; ties break toward X.
+     */
+    private static void moveOneOrthogonalStep(
+            UnitInstance unit,
+            UnitInstance target,
+            CombatBoard combatBoard,
+            List<CombatEvent> events,
+            int tick) {
+        int dx = target.getX() - unit.getX();
+        int dy = target.getY() - unit.getY();
+        if (dx == 0 && dy == 0) {
+            return;
+        }
+
+        int nextX = unit.getX();
+        int nextY = unit.getY();
+        int absDx = Math.abs(dx);
+        int absDy = Math.abs(dy);
+
+        if (absDx >= absDy && dx != 0) {
+            nextX += Integer.signum(dx);
+        } else if (dy != 0) {
+            nextY += Integer.signum(dy);
+        }
+
+        if (!combatBoard.isOccupied(nextX, nextY)
+                && CombatBoard.isValidPosition(nextX, nextY)) {
+            unit.setPosition(nextX, nextY);
+            events.add(CombatEvent.unitMoved(
+                tick, unit.getId(), unit.getX(), unit.getY(), unit.getPlayerId()));
+        }
+    }
+
+    private void handleHealerHeal(
+            UnitInstance healer,
+            List<UnitInstance> allies,
+            List<CombatEvent> events,
+            int tick) {
+        healer.incrementActionCounter();
+        UnitInstance ally = TargetSelector.findLowestHpAlly(healer, allies);
+        if (ally != null) {
+            int oldHp = ally.getCurrentHp();
+            ally.heal(5);
+            events.add(CombatEvent.healed(
+                tick, healer.getId(), ally.getId(), ally.getCurrentHp() - oldHp));
+        }
+    }
+
     private void handleAttack(
             UnitInstance attacker,
             UnitInstance target,
@@ -161,17 +202,6 @@ public class CombatEngine {
             List<CombatEvent> events,
             int tick) {
         attacker.incrementActionCounter();
-
-        if ("Healer".equals(attacker.getType()) && attacker.isTriggerSpecialAction()) {
-            UnitInstance ally = TargetSelector.findLowestHpAllyInRange(attacker, allies, 2);
-            if (ally != null) {
-                int oldHp = ally.getCurrentHp();
-                ally.heal(5);
-                events.add(CombatEvent.healed(
-                    tick, attacker.getId(), ally.getId(), ally.getCurrentHp() - oldHp));
-            }
-            return;
-        }
 
         int baseDamage = Math.max(1, attacker.getAttack() - target.getArmor());
         target.takeDamage(baseDamage);

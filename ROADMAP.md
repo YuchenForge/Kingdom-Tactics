@@ -60,12 +60,12 @@ You can hand the rules document and architecture guide to another developer, and
 - Shieldbearer: −1 armor (minimum 1 damage)
 - Ranger: target lowest HP
 - Knight: target nearest enemy
-- Mage: every 3rd action = splash damage to orthogonal neighbors
-- Healer: every 3rd action = heal lowest HP ally by 5
+- Mage: every 3rd **attack** = splash damage to orthogonal neighbors
+- Healer: every 3rd **attack** = heal lowest HP ally by 5 (board-wide; no enemy in range required on heal turns)
 
 **Rules**:
 - Keep damage: 1 + survivor_count + floor(total_hp / 10)
-- Deterministic tie-breaking by unit ID
+- Deterministic tie-breaking: unit-specific sort order (varies by type), always ending in unit ID
 - Time limit: 40 seconds = 160 ticks max
 
 ### Tests

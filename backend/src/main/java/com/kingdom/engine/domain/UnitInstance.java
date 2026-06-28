@@ -106,6 +106,13 @@ public class UnitInstance {
     }
 
     /**
+     * True if the next attack action will be the 3rd, 6th, 9th, … (heal or splash turn).
+     */
+    public boolean willTriggerSpecialOnNextAttack() {
+        return (actionCounter + 1) % 3 == 0;
+    }
+
+    /**
      * Move unit one tile toward target (greedy pathfinding by Manhattan distance).
      */
     public void moveToward(int targetX, int targetY) {
