@@ -13,7 +13,7 @@ public class UnitInstance {
     private int x, y;                     // Local placement or global combat position
     private Integer playerId;             // Set on merged combat board (0 or 1)
     private int cooldownTicks;            // Ticks until next action
-    private int actionCounter;            // For Mage (splash) and Healer (heal) every 3rd action
+    private int actionCounter;            // For Mage (splash) and Healer (heal) every 3rd attack
     private boolean alive;
 
     // Standard attack cooldown: 4 ticks = 1 second at 250ms per tick
@@ -92,14 +92,14 @@ public class UnitInstance {
     }
 
     /**
-     * Increment action counter. Used for Mage (splash) and Healer (heal) every 3rd action.
+     * Increment attack counter. Used for Mage (splash) and Healer (heal) every 3rd attack.
      */
     public void incrementActionCounter() {
         actionCounter++;
     }
 
     /**
-     * Check if action counter is at a multiple of 3 (triggers special ability).
+     * Check if attack counter is at a multiple of 3 (triggers special ability).
      */
     public boolean isTriggerSpecialAction() {
         return actionCounter % 3 == 0;

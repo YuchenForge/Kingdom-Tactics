@@ -103,14 +103,54 @@ public class CombatEngine {
             combatBoard.removeDead();
         }
 
-        int winnerPlayerId = combatBoard.isEmptyForPlayer(0) ? 1 : 0;
+        String endReason = determineEndReason(combatBoard);
+        if ("TIME_LIMIT".equals(endReason)) {
+            events.add(CombatEvent.combatEnded(tick, endReason));
+        }
+
+        int winnerPlayerId = determineWinner(combatBoard);
         int keepDamage = ResolutionResult.calculateKeepDamage(combatBoard, winnerPlayerId);
 
-        String endReason = combatBoard.isEmptyForPlayer(0) ? "ENEMY_VICTORY"
-            : combatBoard.isEmptyForPlayer(1) ? "PLAYER_VICTORY"
-            : "TIME_LIMIT";
-
         return new ResolutionResult(events, combatBoard, keepDamage, tick, endReason, winnerPlayerId);
+    }
+
+    private static String determineEndReason(CombatBoard combatBoard) {
+        if (combatBoard.isEmptyForPlayer(0)) {
+            return "ENEMY_VICTORY";
+        }
+        if (combatBoard.isEmptyForPlayer(1)) {
+            return "PLAYER_VICTORY";
+        }
+        return "TIME_LIMIT";
+    }
+
+    /**
+     * Player with surviving units wins by elimination; on time limit, higher total HP wins.
+     */
+    static int determineWinner(CombatBoard combatBoard) {
+        boolean empty0 = combatBoard.isEmptyForPlayer(0);
+        boolean empty1 = combatBoard.isEmptyForPlayer(1);
+
+        if (empty0 && !empty1) {
+            return 1;
+        }
+        if (empty1 && !empty0) {
+            return 0;
+        }
+
+        int hp0 = combatBoard.getTotalHpForPlayer(0);
+        int hp1 = combatBoard.getTotalHpForPlayer(1);
+        if (hp0 != hp1) {
+            return hp0 > hp1 ? 0 : 1;
+        }
+
+        int count0 = combatBoard.getUnitCountForPlayer(0);
+        int count1 = combatBoard.getUnitCountForPlayer(1);
+        if (count0 != count1) {
+            return count0 > count1 ? 0 : 1;
+        }
+
+        return 0;
     }
 
     private void handleAttack(

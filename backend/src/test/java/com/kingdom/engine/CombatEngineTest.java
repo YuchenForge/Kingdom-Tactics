@@ -1,9 +1,12 @@
 package com.kingdom.engine;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
 import com.kingdom.engine.domain.Board;
+import com.kingdom.engine.domain.CombatEvent;
 import com.kingdom.engine.domain.ResolutionResult;
 import com.kingdom.engine.domain.UnitDefinition;
 import com.kingdom.engine.domain.UnitInstance;
@@ -48,6 +51,37 @@ class CombatEngineTest {
         assertThat(result.getEvents()).isNotEmpty();
         assertThat(result.getKeepDamage()).isGreaterThan(0);
         assertThat(result.getWinnerPlayerId()).isEqualTo(0);
+    }
+
+    @Test
+    void scenario_3_ranger_target_lowest_HP() {
+        Board playerBoard = new Board(0);
+        Board enemyBoard = new Board(1);
+
+        // Ranger stays on back row; both enemies are within Chebyshev range 3
+        UnitInstance ranger = new UnitInstance("unit_001", UnitDefinition.ranger(), 1, 3);
+        // Shieldbearer (16 HP) and Squire (8 HP) stand in for the doc's two Squires at 8 vs 6 HP.
+        // CombatBoard.merge() resets all units to full HP, so pre-combat takeDamage() has no effect.
+        UnitInstance highHpEnemy = new UnitInstance("unit_002", UnitDefinition.shieldbearer(), 0, 1);
+        UnitInstance lowHpEnemy = new UnitInstance("unit_003", UnitDefinition.squire(), 1, 1);
+
+        playerBoard.addUnit(ranger);
+        enemyBoard.addUnit(highHpEnemy);
+        enemyBoard.addUnit(lowHpEnemy);
+
+        CombatEngine engine = new CombatEngine(54321L);
+        ResolutionResult result = engine.resolve(playerBoard, enemyBoard);
+
+        List<CombatEvent> rangerAttacks = result.getEvents().stream()
+            .filter(e -> e.getType() == CombatEvent.EventType.ATTACK)
+            .filter(e -> "unit_001".equals(e.getData().get("attackerId")))
+            .toList();
+
+        assertThat(rangerAttacks).isNotEmpty();
+        assertThat(rangerAttacks.get(0).getData().get("targetId")).isEqualTo("unit_003");
+
+        assertThat(result.getWinnerPlayerId()).isEqualTo(0);
+        assertThat(result.getKeepDamage()).isEqualTo(2);
     }
 
     @Test

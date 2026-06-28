@@ -49,11 +49,11 @@ public class UnitDefinition {
     }
 
     public static UnitDefinition mage() {
-        return new UnitDefinition("Mage", 3, 9, 6, 3, "SplashEvery3rdAction");
+        return new UnitDefinition("Mage", 3, 9, 6, 3, "SplashEvery3rdAttack");
     }
 
     public static UnitDefinition healer() {
-        return new UnitDefinition("Healer", 3, 10, 1, 2, "HealEvery3rdAction");
+        return new UnitDefinition("Healer", 3, 10, 1, 2, "HealEvery3rdAttack");
     }
 
     @Override
