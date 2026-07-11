@@ -20,12 +20,6 @@ Kingdom Tactics is developed in 8 phases, each with a clear definition of "done.
 - ✅ `docs/adr/003-deterministic-combat.md`
 - ✅ `docs/architecture.md` — High-level system design
 
-### Definition of done
-
-You can hand the rules document and architecture guide to another developer, and they can implement the engine without asking clarifying questions.
-
----
-
 ## Phase 1: Pure deterministic combat engine
 
 **Status:** Next
