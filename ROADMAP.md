@@ -45,7 +45,7 @@ Kingdom Tactics is developed in 8 phases, each with a clear definition of "done.
 - 250ms logical tick (4 ticks/second)
 - Cooldown management
 - Target selection (with unit-specific tie-breaks)
-- Movement (greedy pathfinding toward nearest enemy)
+- Movement (BFS pathfinding toward reachable attack positions)
 - Attack and damage (max(1, ATK - armor))
 - Death and removal
 

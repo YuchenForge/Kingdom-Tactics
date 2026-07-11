@@ -2,9 +2,9 @@
 
 A deployable, server-authoritative 1v1 turn-based tactical auto-battler. Players recruit units from a rotating shop, place them on a grid, and lock their formation. The backend runs deterministic combat simulation and persists outcomes.
 
-This project is a **full-stack SWE system** first, a game second—designed to showcase transactional backends, deterministic domain engines, secure command processing, and production-grade observability.
+This project is designed to showcase transactional backends, deterministic domain engines, secure command processing, and production-grade observability.
 
-**Status:** Phase 0 (design & specification) complete. Ready for Phase 1 implementation.
+**Status:** Phase 1
 
 ---
 
@@ -12,7 +12,7 @@ This project is a **full-stack SWE system** first, a game second—designed to s
 
 - **[Game Rules](docs/rules.md)** — Complete, unambiguous mechanics
 - **[Architecture Decision Records](docs/adr/)** — Why we made key choices
-- **[Combat Scenarios](docs/combat-scenarios.md)** — 15 test cases for validation
+- **[Combat Scenarios](docs/combat-scenarios.md)** — Test cases for validation
 - **[State Machine](docs/state-machine.md)** — Game lifecycle and transitions
 - **[Roadmap](ROADMAP.md)** — 8-phase development plan
 - **[Local Setup](docs/local-setup.md)** — Dev environment guide
@@ -138,9 +138,9 @@ Java / Spring Boot API
      ▼      ▼                       ▼
 PostgreSQL  Redis                 Worker
   │          │                      │
-  │          ├─ job queue            ├─ round resolution
-  │          ├─ rate limiting        ├─ combat engine
-  │          └─ caching              └─ event persistence
+  │          ├─ job queue           ├─ round resolution
+  │          ├─ rate limiting       ├─ combat engine
+  │          └─ caching             └─ event persistence
   ▼
 Flyway migrations
 ```

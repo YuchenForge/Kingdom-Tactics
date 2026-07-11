@@ -113,17 +113,6 @@ public class UnitInstance {
     }
 
     /**
-     * Move unit one tile toward target (greedy pathfinding by Manhattan distance).
-     */
-    public void moveToward(int targetX, int targetY) {
-        if (x < targetX) x++;
-        else if (x > targetX) x--;
-
-        if (y < targetY) y++;
-        else if (y > targetY) y--;
-    }
-
-    /**
      * Set unit position to (x, y)
      */
     public void setPosition(int x, int y) {

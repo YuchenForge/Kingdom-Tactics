@@ -86,7 +86,7 @@ public class CombatEngine {
                 } else if (target != null && unit.chebyshevDistance(target) <= unit.getRange()) {
                     handleAttack(unit, target, combatBoard, allies, events, tick);
                 } else if (target != null && unit.isAlive()) {
-                    moveOneOrthogonalStep(unit, target, combatBoard, events, tick);
+                    moveAlongPlannedPath(unit, target, combatBoard, events, tick);
                 }
 
                 unit.resetCooldown();
@@ -155,38 +155,20 @@ public class CombatEngine {
     }
 
     /**
-     * Move one orthogonal tile (N/S/E/W) toward the target.
-     * When diagonal, prefers the axis with larger |delta|; ties break toward X.
+     * Move one orthogonal tile along the BFS shortest path toward a reachable attack
+     * position, or toward the closest reachable tile when no attack position exists.
      */
-    private static void moveOneOrthogonalStep(
+    private static void moveAlongPlannedPath(
             UnitInstance unit,
             UnitInstance target,
             CombatBoard combatBoard,
             List<CombatEvent> events,
             int tick) {
-        int dx = target.getX() - unit.getX();
-        int dy = target.getY() - unit.getY();
-        if (dx == 0 && dy == 0) {
-            return;
-        }
-
-        int nextX = unit.getX();
-        int nextY = unit.getY();
-        int absDx = Math.abs(dx);
-        int absDy = Math.abs(dy);
-
-        if (absDx >= absDy && dx != 0) {
-            nextX += Integer.signum(dx);
-        } else if (dy != 0) {
-            nextY += Integer.signum(dy);
-        }
-
-        if (!combatBoard.isOccupied(nextX, nextY)
-                && CombatBoard.isValidPosition(nextX, nextY)) {
-            unit.setPosition(nextX, nextY);
+        MovementPlanner.computeNextStep(unit, target, combatBoard).ifPresent(next -> {
+            unit.setPosition(next[0], next[1]);
             events.add(CombatEvent.unitMoved(
                 tick, unit.getId(), unit.getX(), unit.getY(), unit.getPlayerId()));
-        }
+        });
     }
 
     private void handleHealerHeal(
