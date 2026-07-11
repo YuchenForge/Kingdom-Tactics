@@ -3,9 +3,10 @@ package com.kingdom.engine.domain;
 /**
  * Coordinate mapping between per-player placement boards and the merged combat board.
  *
- * Placement boards use local coordinates (0–3, 0–3). Combat merges both boards into
- * a 4×8 grid stacked vertically: player 0 on top (rows 0–3), player 1 on bottom
- * (rows 4–7). Column orientation is shared (x=0 left, x=3 right).
+ * <p>Placement boards use local coordinates (0–3, 0–3). Combat merges both boards into
+ * a 4×8 grid stacked vertically. Player 1 occupies the lower half unchanged. Player 0's
+ * board is rotated 180° (chess perspective — facing the opponent) before occupying the
+ * upper half: both row and column order are reversed.
  */
 public final class Coordinates {
     public static final int PLACEMENT_WIDTH = Board.WIDTH;
@@ -27,25 +28,29 @@ public final class Coordinates {
     }
 
     /**
-     * Convert a player's local placement x to global combat x (unchanged for both players).
+     * Convert a player's local placement x to global combat x.
+     * Player 0: columns reversed. Player 1: unchanged.
      */
     public static int toCombatX(int localX, int playerId) {
         validatePlayerId(playerId);
-        if (localX < 0 || localX >= PLACEMENT_WIDTH) {
-            throw new IllegalArgumentException("Invalid local x: " + localX);
+        validateLocalX(localX);
+        if (playerId == 0) {
+            return (PLACEMENT_WIDTH - 1) - localX;
         }
         return localX;
     }
 
     /**
      * Convert a player's local placement y to global combat y.
+     * Player 0: rows reversed in upper half. Player 1: offset by 4.
      */
     public static int toCombatY(int localY, int playerId) {
         validatePlayerId(playerId);
-        if (localY < 0 || localY >= PLACEMENT_HEIGHT) {
-            throw new IllegalArgumentException("Invalid local y: " + localY);
+        validateLocalY(localY);
+        if (playerId == 0) {
+            return (PLACEMENT_HEIGHT - 1) - localY;
         }
-        return localY + rowOffset(playerId);
+        return localY + PLAYER_1_ROW_OFFSET;
     }
 
     /**
@@ -53,8 +58,9 @@ public final class Coordinates {
      */
     public static int toLocalX(int combatX, int playerId) {
         validatePlayerId(playerId);
-        if (combatX < 0 || combatX >= PLACEMENT_WIDTH) {
-            throw new IllegalArgumentException("Invalid combat x: " + combatX);
+        validateLocalX(combatX);
+        if (playerId == 0) {
+            return (PLACEMENT_WIDTH - 1) - combatX;
         }
         return combatX;
     }
@@ -64,7 +70,11 @@ public final class Coordinates {
      */
     public static int toLocalY(int combatY, int playerId) {
         validatePlayerId(playerId);
-        int localY = combatY - rowOffset(playerId);
+        if (playerId == 0) {
+            validateLocalY(combatY);
+            return (PLACEMENT_HEIGHT - 1) - combatY;
+        }
+        int localY = combatY - PLAYER_1_ROW_OFFSET;
         if (localY < 0 || localY >= PLACEMENT_HEIGHT) {
             throw new IllegalArgumentException(
                 "Combat y " + combatY + " is outside player " + playerId + " half");
@@ -92,13 +102,21 @@ public final class Coordinates {
         return y * COMBAT_WIDTH + x;
     }
 
-    private static int rowOffset(int playerId) {
-        return playerId == 0 ? PLAYER_0_ROW_OFFSET : PLAYER_1_ROW_OFFSET;
-    }
-
     private static void validatePlayerId(int playerId) {
         if (playerId != 0 && playerId != 1) {
             throw new IllegalArgumentException("playerId must be 0 or 1: " + playerId);
+        }
+    }
+
+    private static void validateLocalX(int x) {
+        if (x < 0 || x >= PLACEMENT_WIDTH) {
+            throw new IllegalArgumentException("Invalid local x: " + x);
+        }
+    }
+
+    private static void validateLocalY(int y) {
+        if (y < 0 || y >= PLACEMENT_HEIGHT) {
+            throw new IllegalArgumentException("Invalid local y: " + y);
         }
     }
 }

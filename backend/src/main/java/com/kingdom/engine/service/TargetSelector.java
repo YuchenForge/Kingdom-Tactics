@@ -50,21 +50,6 @@ public class TargetSelector {
         return sortedAllies.get(0);
     }
 
-    public static UnitInstance findLowestHpAllyInRange(
-            UnitInstance unit, List<UnitInstance> allies, int range) {
-        List<UnitInstance> sortedAllies = new ArrayList<>(allies);
-        sortedAllies.sort(Comparator.comparingInt(UnitInstance::getCurrentHp)
-            .thenComparing(UnitInstance::getId));
-
-        for (UnitInstance ally : sortedAllies) {
-            if (unit.chebyshevDistance(ally) <= range) {
-                return ally;
-            }
-        }
-
-        return null;
-    }
-
     private static UnitInstance pickLowestHpFirst(UnitInstance unit, List<UnitInstance> candidates) {
         candidates.sort(
             Comparator.comparingInt(UnitInstance::getCurrentHp)

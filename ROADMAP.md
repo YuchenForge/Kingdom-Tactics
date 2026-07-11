@@ -38,7 +38,7 @@ You can hand the rules document and architecture guide to another developer, and
 - `GameState` — Entire game snapshot
 - `PlayerState` — One player's state
 - `Board` — 4×4 placement board (local coordinates)
-- `CombatBoard` — 4×8 merged combat board (global coordinates, stacked vertically)
+- `CombatBoard` — 4×8 merged combat board (P0 rotated 180°, P1 unchanged; global coordinates)
 - `HoldingLane` — 5-slot holding lane for purchased units
 - `Coordinates` — Local ↔ global coordinate mapping
 - `UnitInstance` — An instantiated unit with HP, position, cooldown
@@ -301,7 +301,7 @@ A complete 8-round match can run via API with worker resolution. Full match is r
 - 4×4 CSS Grid placement board per player (local coordinates)
 - Shop display (5 unit cards)
 - 5-slot holding lane per player
-- 4×8 merged combat board for replay (global coordinates, stacked vertically)
+- 4×8 merged combat board for replay (P0 rotated 180°; global coordinates)
 - Gold and Keep HP counters
 - "Lock board" button
 - Action confirmation (buy, place, sell)

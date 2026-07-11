@@ -47,10 +47,11 @@ public class CombatEngine {
                 tick, unit.getId(), unit.getType(), unit.getX(), unit.getY(), unit.getPlayerId()));
         }
 
+        boolean combatEnded = false;
         for (tick = 0; tick < MAX_TICKS; tick++) {
             if (combatBoard.isEmptyForPlayer(0) || combatBoard.isEmptyForPlayer(1)) {
-                String reason = combatBoard.isEmptyForPlayer(0) ? "ENEMY_WINS" : "PLAYER_WINS";
-                events.add(CombatEvent.combatEnded(tick, reason));
+                events.add(CombatEvent.combatEnded(tick, determineEndReason(combatBoard)));
+                combatEnded = true;
                 break;
             }
 
@@ -95,37 +96,46 @@ public class CombatEngine {
         }
 
         String endReason = determineEndReason(combatBoard);
-        if ("TIME_LIMIT".equals(endReason)) {
+        if (!combatEnded && "TIME_LIMIT".equals(endReason)) {
             events.add(CombatEvent.combatEnded(tick, endReason));
         }
 
         int winnerPlayerId = determineWinner(combatBoard);
-        int keepDamage = ResolutionResult.calculateKeepDamage(combatBoard, winnerPlayerId);
+        int[] keepDamageByPlayer = ResolutionResult.calculateKeepDamageByPlayer(combatBoard, winnerPlayerId);
 
-        return new ResolutionResult(events, combatBoard, keepDamage, tick, endReason, winnerPlayerId);
+        return new ResolutionResult(
+            events, combatBoard, keepDamageByPlayer, tick, endReason, winnerPlayerId);
     }
 
     private static String determineEndReason(CombatBoard combatBoard) {
-        if (combatBoard.isEmptyForPlayer(0)) {
+        boolean empty0 = combatBoard.isEmptyForPlayer(0);
+        boolean empty1 = combatBoard.isEmptyForPlayer(1);
+        if (empty0 && empty1) {
+            return "DRAW";
+        }
+        if (empty0) {
             return "ENEMY_VICTORY";
         }
-        if (combatBoard.isEmptyForPlayer(1)) {
+        if (empty1) {
             return "PLAYER_VICTORY";
         }
         return "TIME_LIMIT";
     }
 
     /**
-     * Player with surviving units wins by elimination; on time limit, higher total HP wins.
+     * Player with surviving units wins by elimination; mutual wipe is a draw; on time limit, higher total HP wins.
      */
     static int determineWinner(CombatBoard combatBoard) {
         boolean empty0 = combatBoard.isEmptyForPlayer(0);
         boolean empty1 = combatBoard.isEmptyForPlayer(1);
 
-        if (empty0 && !empty1) {
+        if (empty0 && empty1) {
+            return -1;
+        }
+        if (empty0) {
             return 1;
         }
-        if (empty1 && !empty0) {
+        if (empty1) {
             return 0;
         }
 

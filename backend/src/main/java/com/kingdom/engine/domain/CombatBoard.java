@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 /**
  * Merged 4×8 combat board formed by stacking two placement boards vertically.
+ * Player 0's half is rotated 180° (chess perspective) before merge; player 1 is unchanged.
  * Exists only during combat resolution. Placement boards are restored separately
  * after the round ends.
  */
