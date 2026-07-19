@@ -14,12 +14,62 @@ class UnitInstanceTest {
     void new_unit_starts_at_max_hp_with_initial_cooldown() {
         UnitInstance squire = new UnitInstance("unit_001", UnitDefinition.squire(), 1, 2);
 
+        assertThat(squire.getLevel()).isEqualTo(1);
         assertThat(squire.getCurrentHp()).isEqualTo(8);
         assertThat(squire.getCooldownTicks()).isEqualTo(UnitInstance.INITIAL_COOLDOWN);
         assertThat(squire.getActionCounter()).isZero();
         assertThat(squire.isAlive()).isTrue();
         assertThat(squire.getX()).isEqualTo(1);
         assertThat(squire.getY()).isEqualTo(2);
+    }
+
+    @Test
+    void level_uses_hp_biased_stat_tables_and_healer_heal_curve() {
+        UnitInstance squireL2 = new UnitInstance("unit_001", UnitDefinition.squire(), 0, 0, 2);
+        UnitInstance healerL3 = new UnitInstance("unit_002", UnitDefinition.healer(), 0, 0, 3);
+
+        assertThat(squireL2.getLevel()).isEqualTo(2);
+        assertThat(squireL2.getMaxHp()).isEqualTo(12);
+        assertThat(squireL2.getAttack()).isEqualTo(3);
+        assertThat(squireL2.getCurrentHp()).isEqualTo(12);
+        assertThat(squireL2.getRange()).isEqualTo(1);
+        assertThat(squireL2.getHealAmount()).isZero();
+
+        assertThat(healerL3.getMaxHp()).isEqualTo(22);
+        assertThat(healerL3.getAttack()).isEqualTo(1);
+        assertThat(healerL3.getHealAmount()).isEqualTo(10);
+    }
+
+    @Test
+    void healer_heal_amount_is_5_7_10_by_level() {
+        UnitInstance l1 = new UnitInstance("unit_001", UnitDefinition.healer(), 0, 0, 1);
+        UnitInstance l2 = new UnitInstance("unit_002", UnitDefinition.healer(), 0, 0, 2);
+        UnitInstance l3 = new UnitInstance("unit_003", UnitDefinition.healer(), 0, 0, 3);
+
+        assertThat(l1.getHealAmount()).isEqualTo(5);
+        assertThat(l2.getHealAmount()).isEqualTo(7);
+        assertThat(l3.getHealAmount()).isEqualTo(10);
+    }
+
+    @Test
+    void level_rejects_values_outside_1_to_3() {
+        assertThatThrownBy(() -> new UnitInstance("unit_001", UnitDefinition.squire(), 0, 0, 0))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("level");
+
+        assertThatThrownBy(() -> new UnitInstance("unit_001", UnitDefinition.squire(), 0, 0, 4))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("level");
+    }
+
+    @Test
+    void armor_does_not_scale_with_level() {
+        UnitInstance shieldbearerL3 = new UnitInstance(
+            "unit_001", UnitDefinition.shieldbearer(), 0, 0, 3);
+
+        assertThat(shieldbearerL3.getArmor()).isEqualTo(1);
+        assertThat(shieldbearerL3.getMaxHp()).isEqualTo(34);
+        assertThat(shieldbearerL3.getAttack()).isEqualTo(1);
     }
 
     @Test

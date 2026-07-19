@@ -178,7 +178,8 @@ public class Board {
     }
 
     private static UnitInstance copyAtFullHp(UnitInstance unit) {
-        return new UnitInstance(unit.getId(), unit.getDefinition(), unit.getX(), unit.getY());
+        return new UnitInstance(
+            unit.getId(), unit.getDefinition(), unit.getX(), unit.getY(), unit.getLevel());
     }
 
     @Override

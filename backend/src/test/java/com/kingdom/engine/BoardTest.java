@@ -159,6 +159,19 @@ class BoardTest {
     }
 
     @Test
+    void copyForNextRound_preserves_level() {
+        Board board = new Board(0);
+        board.addUnit(new UnitInstance("unit_001", UnitDefinition.knight(), 1, 1, 3));
+
+        UnitInstance restored = board.copyForNextRound().getUnit("unit_001");
+
+        assertThat(restored.getLevel()).isEqualTo(3);
+        assertThat(restored.getMaxHp()).isEqualTo(38);
+        assertThat(restored.getCurrentHp()).isEqualTo(38);
+        assertThat(restored.getAttack()).isEqualTo(8);
+    }
+
+    @Test
     void boardsForNextRound_copies_both_players() {
         Board player0 = new Board(0);
         Board player1 = new Board(1);

@@ -54,6 +54,24 @@ class CombatBoardTest {
     }
 
     @Test
+    void merge_preserves_level_and_resets_to_scaled_max_hp() {
+        Board player0 = new Board(0);
+        Board player1 = new Board(1);
+        UnitInstance leveled = new UnitInstance("unit_001", UnitDefinition.squire(), 0, 0, 2);
+        leveled.takeDamage(3);
+        player0.addUnit(leveled);
+        player1.addUnit(new UnitInstance("unit_002", UnitDefinition.squire(), 0, 0));
+
+        CombatBoard combatBoard = CombatBoard.merge(player0, player1);
+        UnitInstance merged = combatBoard.getUnit("unit_001");
+
+        assertThat(merged.getLevel()).isEqualTo(2);
+        assertThat(merged.getMaxHp()).isEqualTo(12);
+        assertThat(merged.getCurrentHp()).isEqualTo(12);
+        assertThat(merged.getAttack()).isEqualTo(3);
+    }
+
+    @Test
     void addUnit_requires_playerId() {
         CombatBoard board = new CombatBoard();
         UnitInstance unit = new UnitInstance("unit_001", UnitDefinition.squire(), 0, 0);

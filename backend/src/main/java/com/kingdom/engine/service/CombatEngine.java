@@ -180,7 +180,7 @@ public class CombatEngine {
         UnitInstance ally = TargetSelector.findLowestHpAlly(healer, allies);
         if (ally != null) {
             int oldHp = ally.getCurrentHp();
-            ally.heal(5);
+            ally.heal(healer.getHealAmount());
             events.add(CombatEvent.healed(
                 tick, healer.getId(), ally.getId(), ally.getCurrentHp() - oldHp));
         }

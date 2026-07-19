@@ -59,13 +59,15 @@ public class CombatBoard {
     }
 
     private static UnitInstance copyForCombat(UnitInstance unit, int combatX, int combatY, int playerId) {
-        UnitInstance copy = new UnitInstance(unit.getId(), unit.getDefinition(), combatX, combatY);
+        UnitInstance copy = new UnitInstance(
+            unit.getId(), unit.getDefinition(), combatX, combatY, unit.getLevel());
         copy.setPlayerId(playerId);
         return copy;
     }
 
     private static UnitInstance copyUnit(UnitInstance unit) {
-        UnitInstance copy = new UnitInstance(unit.getId(), unit.getDefinition(), unit.getX(), unit.getY());
+        UnitInstance copy = new UnitInstance(
+            unit.getId(), unit.getDefinition(), unit.getX(), unit.getY(), unit.getLevel());
         copy.setCurrentHp(unit.getCurrentHp());
         copy.setCooldownTicks(unit.getCooldownTicks());
         copy.setActionCounter(unit.getActionCounter());

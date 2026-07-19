@@ -5,10 +5,15 @@ import java.util.Objects;
 /**
  * A unit instance in combat.
  * Mutable during combat (position, HP, cooldown change).
+ *
+ * <p>Level (1–3) selects HP/ATK/heal from {@link UnitDefinition} tables
+ * (preferential HP scaling; see {@code docs/rules.md} §5).
+ * Merge/level-up logic lives in Phase 3; Phase 1 may hand-build leveled instances.
  */
 public class UnitInstance {
     private final String id;              // Unique unit ID (e.g., "unit_001")
     private final UnitDefinition definition;
+    private final int level;              // 1–3; shop default is 1
     private int currentHp;
     private int x, y;                     // Local placement or global combat position
     private Integer playerId;             // Set on merged combat board (0 or 1)
@@ -18,11 +23,22 @@ public class UnitInstance {
 
     // Standard attack cooldown: 4 ticks = 1 second at 250ms per tick
     public static final int INITIAL_COOLDOWN = 4;
+    public static final int MIN_LEVEL = 1;
+    public static final int MAX_LEVEL = 3;
 
     public UnitInstance(String id, UnitDefinition definition, int x, int y) {
+        this(id, definition, x, y, MIN_LEVEL);
+    }
+
+    public UnitInstance(String id, UnitDefinition definition, int x, int y, int level) {
         this.id = Objects.requireNonNull(id);
         this.definition = Objects.requireNonNull(definition);
-        this.currentHp = definition.getMaxHp();
+        if (level < MIN_LEVEL || level > MAX_LEVEL) {
+            throw new IllegalArgumentException(
+                "level must be between " + MIN_LEVEL + " and " + MAX_LEVEL + ": " + level);
+        }
+        this.level = level;
+        this.currentHp = getMaxHp();
         this.x = x;
         this.y = y;
         this.cooldownTicks = INITIAL_COOLDOWN;
@@ -33,6 +49,7 @@ public class UnitInstance {
     // Getters
     public String getId() { return id; }
     public UnitDefinition getDefinition() { return definition; }
+    public int getLevel() { return level; }
     public int getCurrentHp() { return currentHp; }
     public int getX() { return x; }
     public int getY() { return y; }
@@ -40,9 +57,24 @@ public class UnitInstance {
     public int getActionCounter() { return actionCounter; }
     public boolean isAlive() { return alive; }
     public String getType() { return definition.getType(); }
-    public int getMaxHp() { return definition.getMaxHp(); }
-    public int getAttack() { return definition.getAttack(); }
+
+    /** Effective max HP for this unit's level. */
+    public int getMaxHp() { return definition.getMaxHp(level); }
+
+    /** Effective attack for this unit's level. */
+    public int getAttack() { return definition.getAttack(level); }
+
+    /** Range does not scale with level. */
     public int getRange() { return definition.getRange(); }
+
+    /**
+     * Effective Healer heal amount for this level (5 / 7 / 10).
+     * Non-healers return 0.
+     */
+    public int getHealAmount() {
+        return definition.getHealAmount(level);
+    }
+
     public Integer getPlayerId() { return playerId; }
 
     public void setPlayerId(int playerId) {
@@ -136,7 +168,7 @@ public class UnitInstance {
      * Heal unit. Capped at max HP.
      */
     public void heal(int amount) {
-        currentHp = Math.min(currentHp + amount, definition.getMaxHp());
+        currentHp = Math.min(currentHp + amount, getMaxHp());
     }
 
     /**
@@ -154,7 +186,7 @@ public class UnitInstance {
     }
 
     /**
-     * Get armor reduction (1 for Shieldbearer, 0 for others).
+     * Get armor reduction (1 for Shieldbearer, 0 for others). Does not scale with level.
      */
     public int getArmor() {
         return "Shieldbearer".equals(definition.getType()) ? 1 : 0;
@@ -162,8 +194,8 @@ public class UnitInstance {
 
     @Override
     public String toString() {
-        return String.format("%s(%s, HP:%d/%d, pos:(%d,%d), cd:%d)", 
-            id, definition.getType(), currentHp, definition.getMaxHp(), x, y, cooldownTicks);
+        return String.format("%s(%s L%d, HP:%d/%d, pos:(%d,%d), cd:%d)",
+            id, definition.getType(), level, currentHp, getMaxHp(), x, y, cooldownTicks);
     }
 
     @Override
