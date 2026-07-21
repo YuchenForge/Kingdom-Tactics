@@ -82,6 +82,26 @@ class MovementPlannerTest {
     }
 
     @Test
+    void path_reopens_when_blocker_is_removed() {
+        CombatBoard board = new CombatBoard();
+        UnitInstance knight = unit("unit_001", UnitDefinition.knight(), 1, 3, 0);
+        UnitInstance blocker = unit("unit_003", UnitDefinition.squire(), 1, 4, 0);
+        UnitInstance target = unit("unit_002", UnitDefinition.squire(), 1, 6, 1);
+
+        board.addUnit(knight);
+        board.addUnit(blocker);
+        board.addUnit(target);
+
+        assertThat(MovementPlanner.computeNextStep(knight, target, board).get())
+            .isNotEqualTo(new int[] {1, 4});
+
+        board.removeUnit("unit_003");
+
+        assertThat(MovementPlanner.computeNextStep(knight, target, board))
+            .contains(new int[] {1, 4});
+    }
+
+    @Test
     void tie_breaking_is_deterministic_for_equal_paths() {
         CombatBoard board = new CombatBoard();
         UnitInstance knight = unit("unit_001", UnitDefinition.knight(), 1, 3, 0);

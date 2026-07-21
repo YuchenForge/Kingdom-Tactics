@@ -8,7 +8,7 @@ import com.kingdom.engine.domain.CombatEvent;
 import com.kingdom.engine.domain.ResolutionResult;
 import com.kingdom.engine.domain.UnitInstance;
 
-/** Maps domain {@link ResolutionResult} to CLI JSON DTOs. */
+/** Maps domain to CLI JSON DTOs. */
 public final class CombatResultMapper {
 
     private CombatResultMapper() {

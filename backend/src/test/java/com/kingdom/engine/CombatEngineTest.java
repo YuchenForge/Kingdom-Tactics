@@ -836,4 +836,73 @@ class CombatEngineTest {
         assertThat(result1.getKeepDamageForPlayer(1)).isEqualTo(result2.getKeepDamageForPlayer(1));
         assertThat(result1.getEndReason()).isEqualTo(result2.getEndReason());
     }
+
+    @Test
+    void edge_case_timeout_equal_hp_more_units_player0_wins() {
+        Board playerBoard = new Board(0);
+        Board enemyBoard = new Board(1);
+        playerBoard.addUnit(new UnitInstance("unit_001", UnitDefinition.healer(), 0, 0));
+        enemyBoard.addUnit(new UnitInstance("unit_002", UnitDefinition.healer(), 3, 3));
+
+        ResolutionResult result = new CombatEngine(54321L).resolve(playerBoard, enemyBoard);
+
+        assertThat(result.getFinalTick()).isEqualTo(160);
+        assertThat(result.getEndReason()).isEqualTo("TIME_LIMIT");
+        assertThat(result.getFinalBoard().getTotalHpForPlayer(0))
+            .isEqualTo(result.getFinalBoard().getTotalHpForPlayer(1));
+        assertThat(result.getWinnerPlayerId()).isZero();
+    }
+
+    @Test
+    void edge_case_mutual_wipe_each_keep_takes_one_damage() {
+        Board playerBoard = new Board(0);
+        Board enemyBoard = new Board(1);
+
+        UnitInstance squire1 = new UnitInstance("unit_001", UnitDefinition.squire(), 2, 0);
+        UnitInstance squire2 = new UnitInstance("unit_002", UnitDefinition.squire(), 1, 2);
+
+        playerBoard.addUnit(squire1);
+        enemyBoard.addUnit(squire2);
+
+        ResolutionResult result = new CombatEngine(12345L).resolve(playerBoard, enemyBoard);
+
+        assertThat(result.getEndReason()).isEqualTo("DRAW");
+        assertThat(result.getWinnerPlayerId()).isEqualTo(-1);
+        assertThat(result.getFinalBoard().getUnitCountForPlayer(0)).isZero();
+        assertThat(result.getFinalBoard().getUnitCountForPlayer(1)).isZero();
+        assertThat(result.getKeepDamageForPlayer(0)).isEqualTo(1);
+        assertThat(result.getKeepDamageForPlayer(1)).isEqualTo(1);
+    }
+
+    @Test
+    void edge_case_multiple_mages_splash_same_target() {
+        Board playerBoard = new Board(0);
+        Board enemyBoard = new Board(1);
+
+        UnitInstance mageA = new UnitInstance("unit_001", UnitDefinition.mage(), 3, 0);
+        UnitInstance mageB = new UnitInstance("unit_004", UnitDefinition.mage(), 2, 0);
+        UnitInstance primaryTarget = new UnitInstance("unit_002", UnitDefinition.shieldbearer(), 1, 0);
+        UnitInstance splashTarget = new UnitInstance("unit_003", UnitDefinition.squire(), 0, 0);
+
+        playerBoard.addUnit(mageA);
+        playerBoard.addUnit(mageB);
+        enemyBoard.addUnit(primaryTarget);
+        enemyBoard.addUnit(splashTarget);
+
+        ResolutionResult result = new CombatEngine(54321L).resolve(playerBoard, enemyBoard);
+
+        List<CombatEvent> splashHitsOnSharedTarget = result.getEvents().stream()
+            .filter(e -> e.getType() == CombatEvent.EventType.ATTACK)
+            .filter(e -> "unit_003".equals(e.getData().get("targetId")))
+            .filter(e -> "unit_001".equals(e.getData().get("attackerId"))
+                || "unit_004".equals(e.getData().get("attackerId")))
+            .filter(e -> (int) e.getData().get("damage") == 6)
+            .collect(Collectors.toList());
+
+        assertThat(splashHitsOnSharedTarget).hasSizeGreaterThanOrEqualTo(2);
+        assertThat(splashHitsOnSharedTarget.stream()
+            .map(e -> e.getData().get("attackerId"))
+            .distinct()
+            .count()).isEqualTo(2);
+    }
 }

@@ -148,12 +148,10 @@ public class CombatCliRunner {
             }
             try {
                 Board board = BoardBuilder.buildBoard(playerDto);
-                if (playerDto.id == 0) {
-                    player0 = board;
-                } else if (playerDto.id == 1) {
-                    player1 = board;
-                } else {
-                    err.println("Warning: ignoring unknown player id " + playerDto.id);
+                switch (playerDto.id) {
+                    case 0 -> player0 = board;
+                    case 1 -> player1 = board;
+                    default -> err.println("Warning: ignoring unknown player id " + playerDto.id);
                 }
             } catch (IllegalArgumentException e) {
                 throw new CliException("invalid board for player " + playerDto.id + ": " + e.getMessage());
