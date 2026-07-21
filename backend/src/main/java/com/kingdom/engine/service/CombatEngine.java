@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Random;
 import java.util.Set;
 
 import com.kingdom.engine.domain.Board;
@@ -22,12 +21,8 @@ import com.kingdom.engine.domain.UnitInstance;
 public class CombatEngine {
     private static final int MAX_TICKS = 160;
 
-    private final long seed;
-    private final Random rng;
-
     public CombatEngine(long seed) {
-        this.seed = seed;
-        this.rng = new Random(seed);
+        // Seed is part of the public API for replay/CLI contract; combat is fully deterministic without RNG.
     }
 
     /**
@@ -84,7 +79,7 @@ public class CombatEngine {
                 if ("Healer".equals(unit.getType()) && unit.willTriggerSpecialOnNextAttack()) {
                     handleHealerHeal(unit, allies, events, tick);
                 } else if (target != null && unit.chebyshevDistance(target) <= unit.getRange()) {
-                    handleAttack(unit, target, combatBoard, allies, events, tick);
+                    handleAttack(unit, target, combatBoard, events, tick);
                 } else if (target != null && unit.isAlive()) {
                     moveAlongPlannedPath(unit, target, combatBoard, events, tick);
                 }
@@ -177,7 +172,7 @@ public class CombatEngine {
             List<CombatEvent> events,
             int tick) {
         healer.incrementActionCounter();
-        UnitInstance ally = TargetSelector.findLowestHpAlly(healer, allies);
+        UnitInstance ally = TargetSelector.findLowestHpAlly(allies);
         if (ally != null) {
             int oldHp = ally.getCurrentHp();
             ally.heal(healer.getHealAmount());
@@ -190,7 +185,6 @@ public class CombatEngine {
             UnitInstance attacker,
             UnitInstance target,
             CombatBoard combatBoard,
-            List<UnitInstance> allies,
             List<CombatEvent> events,
             int tick) {
         attacker.incrementActionCounter();

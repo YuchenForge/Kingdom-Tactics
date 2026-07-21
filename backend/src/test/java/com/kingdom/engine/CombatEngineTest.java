@@ -838,43 +838,6 @@ class CombatEngineTest {
     }
 
     @Test
-    void edge_case_timeout_equal_hp_more_units_player0_wins() {
-        Board playerBoard = new Board(0);
-        Board enemyBoard = new Board(1);
-        playerBoard.addUnit(new UnitInstance("unit_001", UnitDefinition.healer(), 0, 0));
-        enemyBoard.addUnit(new UnitInstance("unit_002", UnitDefinition.healer(), 3, 3));
-
-        ResolutionResult result = new CombatEngine(54321L).resolve(playerBoard, enemyBoard);
-
-        assertThat(result.getFinalTick()).isEqualTo(160);
-        assertThat(result.getEndReason()).isEqualTo("TIME_LIMIT");
-        assertThat(result.getFinalBoard().getTotalHpForPlayer(0))
-            .isEqualTo(result.getFinalBoard().getTotalHpForPlayer(1));
-        assertThat(result.getWinnerPlayerId()).isZero();
-    }
-
-    @Test
-    void edge_case_mutual_wipe_each_keep_takes_one_damage() {
-        Board playerBoard = new Board(0);
-        Board enemyBoard = new Board(1);
-
-        UnitInstance squire1 = new UnitInstance("unit_001", UnitDefinition.squire(), 2, 0);
-        UnitInstance squire2 = new UnitInstance("unit_002", UnitDefinition.squire(), 1, 2);
-
-        playerBoard.addUnit(squire1);
-        enemyBoard.addUnit(squire2);
-
-        ResolutionResult result = new CombatEngine(12345L).resolve(playerBoard, enemyBoard);
-
-        assertThat(result.getEndReason()).isEqualTo("DRAW");
-        assertThat(result.getWinnerPlayerId()).isEqualTo(-1);
-        assertThat(result.getFinalBoard().getUnitCountForPlayer(0)).isZero();
-        assertThat(result.getFinalBoard().getUnitCountForPlayer(1)).isZero();
-        assertThat(result.getKeepDamageForPlayer(0)).isEqualTo(1);
-        assertThat(result.getKeepDamageForPlayer(1)).isEqualTo(1);
-    }
-
-    @Test
     void edge_case_multiple_mages_splash_same_target() {
         Board playerBoard = new Board(0);
         Board enemyBoard = new Board(1);

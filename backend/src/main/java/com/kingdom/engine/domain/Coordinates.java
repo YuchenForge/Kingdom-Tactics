@@ -13,7 +13,6 @@ public final class Coordinates {
     public static final int PLACEMENT_HEIGHT = Board.HEIGHT;
     public static final int COMBAT_WIDTH = 4;
     public static final int COMBAT_HEIGHT = 8;
-    public static final int PLAYER_0_ROW_OFFSET = 0;
     public static final int PLAYER_1_ROW_OFFSET = 4;
 
     private Coordinates() {

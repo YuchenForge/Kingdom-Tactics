@@ -22,7 +22,7 @@ class TargetSelectorTest {
         assertThat(higherId.getCurrentHp()).isEqualTo(lowerId.getCurrentHp());
 
         UnitInstance target = TargetSelector.findLowestHpAlly(
-            healer, List.of(healer, lowerId, higherId));
+            List.of(healer, lowerId, higherId));
 
         assertThat(target.getId()).isEqualTo("unit_002");
     }

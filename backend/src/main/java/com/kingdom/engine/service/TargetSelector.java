@@ -40,7 +40,7 @@ public class TargetSelector {
         return pickNearestFirst(unit, candidates);
     }
 
-    public static UnitInstance findLowestHpAlly(UnitInstance unit, List<UnitInstance> allies) {
+    public static UnitInstance findLowestHpAlly(List<UnitInstance> allies) {
         if (allies.isEmpty()) {
             return null;
         }
