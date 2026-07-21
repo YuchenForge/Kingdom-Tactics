@@ -1,0 +1,29 @@
+{
+  "seed": 12345,
+  "players": [
+    {
+      "id": 0,
+      "units": [
+        {
+          "id": "unit_001",
+          "type": "Squire",
+          "x": 2,
+          "y": 0,
+          "level": 1
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "units": [
+        {
+          "id": "unit_002",
+          "type": "Squire",
+          "x": 1,
+          "y": 2,
+          "level": 1
+        }
+      ]
+    }
+  ]
+}

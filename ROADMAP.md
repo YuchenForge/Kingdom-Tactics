@@ -22,7 +22,7 @@ Kingdom Tactics is developed in 8 phases, each with a clear definition of "done.
 
 ## Phase 1: Pure deterministic combat engine
 
-**Status:** Next
+**Status:** Complete ✅
 
 **Goal:** Make the game correct before adding HTTP, a database, or UI.
 
