@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: kingdom-tactics-api
+  profiles:
+    active: dev
+
+---
+# dev — local Docker Postgres
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kingdom_tactics
+    username: kingdom_user
+    password: kingdom_password
+  jpa:
+    hibernate:
+      ddl-auto: validate   # Flyway owns schema
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-change-in-production}
+    expiration-ms: 86400000
+
+---
+# test — Testcontainers overrides datasource in @DynamicPropertySource
+spring:
+  config:
+    activate:
+      on-profile: test
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+logging:
+  level:
+    com.kingdom: DEBUG
