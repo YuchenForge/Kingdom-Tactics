@@ -1,7 +1,8 @@
 package com.kingdom.api.config;
 
-import com.kingdom.api.security.JwtAuthFilter;
+import com.kingdom.api.security.JsonAccessDeniedHandler;
 import com.kingdom.api.security.JsonAuthenticationEntryPoint;
+import com.kingdom.api.security.JwtAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -25,17 +26,24 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             JwtAuthFilter jwtFilter,
-            JsonAuthenticationEntryPoint authenticationEntryPoint) throws Exception {
+            JsonAuthenticationEntryPoint authenticationEntryPoint,
+            JsonAccessDeniedHandler accessDeniedHandler) throws Exception {
         http
                 // CSRF protects cookie-based sessions; this API is JWT/stateless, so disable it
                 .csrf(csrf -> csrf.disable())
                 // No server-side login session — each request carries its own JWT
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers(
+                                "/api/auth/register",
+                                "/api/auth/login"
+                        ).permitAll()
                         .requestMatchers("/api/me").authenticated()
-                        .anyRequest().authenticated())
-                .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint))
+                        .requestMatchers("/api/games", "/api/games/**").authenticated()
+                        .anyRequest().denyAll())
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authenticationEntryPoint) // 401
+                        .accessDeniedHandler(accessDeniedHandler))          // 403 from Spring
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

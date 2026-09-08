@@ -40,6 +40,23 @@ public class GlobalExceptionHandler {
                 .body(error("UNAUTHORIZED", "Invalid email or password", HttpStatus.UNAUTHORIZED.value()));
     }
 
+    @ExceptionHandler(GameNotFoundException.class)
+    public ResponseEntity<ApiError> gameNotFound(GameNotFoundException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(error("GAME_NOT_FOUND", "Game not found", HttpStatus.NOT_FOUND.value()));
+    }
+
+    @ExceptionHandler(NotGameParticipantException.class)
+    public ResponseEntity<ApiError> notParticipant(NotGameParticipantException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(error(
+                        "NOT_GAME_PARTICIPANT",
+                        "You are not a participant of this game",
+                        HttpStatus.FORBIDDEN.value()));
+    }
+
     private String formatFieldError(FieldError fieldError) {
         String field = fieldError.getField();
         String defaultMessage = fieldError.getDefaultMessage();
