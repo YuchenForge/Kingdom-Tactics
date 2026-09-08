@@ -4,6 +4,11 @@ spring:
   profiles:
     active: dev
 
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-change-in-production!}
+    expiration-ms: 86400000
+
 ---
 # dev — local Docker Postgres
 spring:
@@ -25,11 +30,6 @@ spring:
 server:
   port: 8080
 
-app:
-  jwt:
-    secret: ${JWT_SECRET:dev-secret-change-in-production!}
-    expiration-ms: 86400000
-
 ---
 # test — Testcontainers overrides datasource in @DynamicPropertySource
 spring:
@@ -39,6 +39,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+    open-in-view: false
   flyway:
     enabled: true
     locations: classpath:db/migration
