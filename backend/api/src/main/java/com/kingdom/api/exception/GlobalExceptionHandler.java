@@ -57,6 +57,27 @@ public class GlobalExceptionHandler {
                         HttpStatus.FORBIDDEN.value()));
     }
 
+    @ExceptionHandler(AlreadyInGameException.class)
+    public ResponseEntity<ApiError> alreadyInGame(AlreadyInGameException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(error("ALREADY_IN_GAME", "You are already in this game", HttpStatus.BAD_REQUEST.value()));
+    }
+
+    @ExceptionHandler(GameFullException.class)
+    public ResponseEntity<ApiError> gameFull(GameFullException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(error("GAME_FULL", "Game is full or no longer joinable", HttpStatus.CONFLICT.value()));
+    }
+
+    @ExceptionHandler(GameNotReadyException.class)
+    public ResponseEntity<ApiError> gameNotReady(GameNotReadyException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(error("GAME_NOT_READY", "Game is still waiting for players", HttpStatus.CONFLICT.value()));
+    }
+
     private String formatFieldError(FieldError fieldError) {
         String field = fieldError.getField();
         String defaultMessage = fieldError.getDefaultMessage();

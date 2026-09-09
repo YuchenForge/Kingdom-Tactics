@@ -5,11 +5,11 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
+import java.time.Instant;
 import java.util.UUID;
-
-// Maps game_players (V3) so participant checks can query membership without raw SQL
 
 @Entity
 @Table(name = "game_players")
@@ -28,6 +28,12 @@ public class GamePlayer {
     @Column(nullable = false)
     private int seat;
 
+    @Column(name = "is_ready", nullable = false)
+    private boolean ready = false;
+
+    @Column(name = "joined_at", nullable = false)
+    private Instant joinedAt;
+
     protected GamePlayer() {
     }
 
@@ -35,6 +41,13 @@ public class GamePlayer {
         this.gameId = gameId;
         this.playerId = playerId;
         this.seat = seat;
+    }
+
+    @PrePersist
+    void onCreate() {
+        if (joinedAt == null) {
+            joinedAt = Instant.now();
+        }
     }
 
     public UUID getId() {
@@ -63,5 +76,17 @@ public class GamePlayer {
 
     public void setSeat(int seat) {
         this.seat = seat;
+    }
+
+    public boolean isReady() {
+        return ready;
+    }
+
+    public void setReady(boolean ready) {
+        this.ready = ready;
+    }
+
+    public Instant getJoinedAt() {
+        return joinedAt;
     }
 }

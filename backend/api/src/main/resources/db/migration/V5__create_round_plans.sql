@@ -4,7 +4,6 @@ CREATE TABLE round_plans (
     player_id    UUID      NOT NULL REFERENCES users(id),
     is_locked    BOOLEAN   NOT NULL DEFAULT FALSE,
     board_state  JSONB     NOT NULL,
-    bench_units  JSONB     NOT NULL DEFAULT '[]',
     lane_units   JSONB     NOT NULL DEFAULT '[null,null,null,null,null]',
     gold         INTEGER   NOT NULL,
     locked_at    TIMESTAMP,

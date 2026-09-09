@@ -71,7 +71,8 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>2.22.2</version>
                     <configuration>
-                        <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+                        <!-- @{argLine} keeps JaCoCo's javaagent when prepare-agent runs -->
+                        <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
                         <includes>
                             <include>**/*Test.java</include>
                             <include>**/*IT.java</include>
