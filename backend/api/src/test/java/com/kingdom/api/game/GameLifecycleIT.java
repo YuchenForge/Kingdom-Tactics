@@ -64,6 +64,11 @@ class GameLifecycleIT {
                 .andExpect(jsonPath("$.state").value("WAITING_FOR_PLAYERS"))
                 .andExpect(jsonPath("$.currentRound").value(0))
                 .andExpect(jsonPath("$.players", hasSize(1)))
+                .andExpect(jsonPath("$.players[0].seat").value(0))
+                .andExpect(jsonPath("$.players[0].gold").value(10))
+                .andExpect(jsonPath("$.players[0].playerId").exists())
+                .andExpect(jsonPath("$.players[0].username").value("alice"))
+                .andExpect(jsonPath("$.createdAt").exists())
                 .andReturn();
 
         String gameId = extractJsonField(createResult.getResponse().getContentAsString(), "gameId");
@@ -72,19 +77,29 @@ class GameLifecycleIT {
         mockMvc.perform(post("/api/games/" + gameId + "/join")
                         .header("Authorization", "Bearer " + tokenBob))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gameId").exists())
                 .andExpect(jsonPath("$.state").value("PREPARATION"))
                 .andExpect(jsonPath("$.currentRound").value(1))
                 .andExpect(jsonPath("$.players", hasSize(2)))
+                .andExpect(jsonPath("$.players[0].seat").value(0))
+                .andExpect(jsonPath("$.players[0].gold").value(10))
+                .andExpect(jsonPath("$.players[1].seat").value(1))
+                .andExpect(jsonPath("$.players[1].gold").value(10))
                 .andExpect(jsonPath("$.planningDeadline", notNullValue()));
 
         mockMvc.perform(get("/api/games/" + gameId + "/state")
                         .header("Authorization", "Bearer " + tokenAlice))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gameId").exists())
+                .andExpect(jsonPath("$.yourSeat").value(0))
                 .andExpect(jsonPath("$.yourGold").value(10))
                 .andExpect(jsonPath("$.yourBoard", hasSize(4)))
                 .andExpect(jsonPath("$.yourBoard[0]", hasSize(4)))
                 .andExpect(jsonPath("$.yourLane", hasSize(5)))
-                .andExpect(jsonPath("$.opponentUnitCount").value(0));
+                .andExpect(jsonPath("$.shop").isArray())
+                .andExpect(jsonPath("$.shop", hasSize(0)))
+                .andExpect(jsonPath("$.opponentUnitCount").value(0))
+                .andExpect(jsonPath("$.opponentBoard").doesNotExist());
 
         mockMvc.perform(get("/api/games/" + gameId + "/state")
                         .header("Authorization", "Bearer " + tokenCharlie))

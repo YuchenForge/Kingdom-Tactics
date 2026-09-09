@@ -1,9 +1,12 @@
 package com.kingdom.api.exception;
 
 import com.kingdom.api.dto.ApiError;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -14,6 +17,8 @@ import java.time.Instant;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> validation(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult().getFieldErrors().stream()
@@ -21,13 +26,23 @@ public class GlobalExceptionHandler {
                 .map(this::formatFieldError)
                 .orElse("Validation failed");
 
+        log.info("Validation failed: {}", message);
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(error("VALIDATION_ERROR", message, HttpStatus.BAD_REQUEST.value()));
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> badJson(HttpMessageNotReadableException ex) {
+        log.info("Malformed request body");
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(error("VALIDATION_ERROR", "Malformed request body", HttpStatus.BAD_REQUEST.value()));
+    }
+
     @ExceptionHandler(DuplicateUserException.class)
     public ResponseEntity<ApiError> duplicate(DuplicateUserException ex) {
+        log.info("Registration conflict: {} already exists", ex.getField());
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(error("CONFLICT", ex.getField() + " already exists", HttpStatus.CONFLICT.value()));
@@ -35,6 +50,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ApiError> badCredentials() {
+        log.info("Login rejected: invalid credentials");
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(error("UNAUTHORIZED", "Invalid email or password", HttpStatus.UNAUTHORIZED.value()));
@@ -42,6 +58,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(GameNotFoundException.class)
     public ResponseEntity<ApiError> gameNotFound(GameNotFoundException ex) {
+        log.info("Game not found");
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(error("GAME_NOT_FOUND", "Game not found", HttpStatus.NOT_FOUND.value()));
@@ -49,6 +66,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NotGameParticipantException.class)
     public ResponseEntity<ApiError> notParticipant(NotGameParticipantException ex) {
+        log.info("Access denied: not a game participant");
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(error(
@@ -59,6 +77,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AlreadyInGameException.class)
     public ResponseEntity<ApiError> alreadyInGame(AlreadyInGameException ex) {
+        log.info("Join rejected: already in game");
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(error("ALREADY_IN_GAME", "You are already in this game", HttpStatus.BAD_REQUEST.value()));
@@ -66,6 +85,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(GameFullException.class)
     public ResponseEntity<ApiError> gameFull(GameFullException ex) {
+        log.info("Join rejected: game full");
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(error("GAME_FULL", "Game is full or no longer joinable", HttpStatus.CONFLICT.value()));
@@ -73,9 +93,21 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(GameNotReadyException.class)
     public ResponseEntity<ApiError> gameNotReady(GameNotReadyException ex) {
+        log.info("State rejected: game not ready");
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(error("GAME_NOT_READY", "Game is still waiting for players", HttpStatus.CONFLICT.value()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiError> unexpected(Exception ex) {
+        log.error("Unhandled exception", ex);  // full stack in logs only
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(error(
+                        "INTERNAL_ERROR",
+                        "An unexpected error occurred",
+                        HttpStatus.INTERNAL_SERVER_ERROR.value()));
     }
 
     private String formatFieldError(FieldError fieldError) {

@@ -2,9 +2,6 @@ package com.kingdom.api.service;
 
 import com.kingdom.api.dto.GameResponse;
 import com.kingdom.api.dto.GameStateResponse;
-import com.kingdom.api.dto.LaneSlotDto;
-import com.kingdom.api.dto.PlayerSummary;
-import com.kingdom.api.dto.ShopSlotDto;
 import com.kingdom.api.entity.Game;
 import com.kingdom.api.entity.GamePlayer;
 import com.kingdom.api.entity.GameStates;
@@ -16,11 +13,15 @@ import com.kingdom.api.exception.GameFullException;
 import com.kingdom.api.exception.GameNotFoundException;
 import com.kingdom.api.exception.GameNotReadyException;
 import com.kingdom.api.exception.NotGameParticipantException;
+import com.kingdom.api.mapper.GameMapper;
 import com.kingdom.api.repository.GamePlayerRepository;
 import com.kingdom.api.repository.GameRepository;
 import com.kingdom.api.repository.RoundPlanRepository;
 import com.kingdom.api.repository.RoundRepository;
 import com.kingdom.api.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,15 +29,16 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class GameService {
 
-    static final int DEFAULT_KEEP_HP = 20;
+    private static final Logger log = LoggerFactory.getLogger(GameService.class);
+
     static final int STARTING_GOLD = 10;
     static final int PLANNING_SECONDS = 45;
 
@@ -62,6 +64,7 @@ public class GameService {
     // Call at the start of every game-scoped read/action once controllers exist.
     // Skip for POST /games (no game yet) and POST /games/{id}/join (caller not a participant yet).
     public void assertParticipant(UUID gameId, UUID userId) {
+        mdcGame(gameId);
         if (!gameRepository.existsById(gameId)) {
             throw new GameNotFoundException(gameId);
         }
@@ -74,24 +77,29 @@ public class GameService {
     @Transactional
     public GameResponse createGame(UUID creatorId) {
         Game game = gameRepository.save(Game.create(creatorId));
+        mdcGame(game.getId());
         gamePlayerRepository.save(new GamePlayer(game.getId(), creatorId, 0));
+        log.info("Game created state={}", game.getState());
         return toGameResponse(game);
     }
 
     // One transaction: seat 1 + game → PREPARATION + round 1 + two plans.
     @Transactional
     public GameResponse joinGame(UUID gameId, UUID joinerId) {
+        mdcGame(gameId);
         Game game = gameRepository.findById(gameId)
                 .orElseThrow(() -> new GameNotFoundException(gameId));
 
         if (gamePlayerRepository.existsByGameIdAndPlayerId(gameId, joinerId)
                 || joinerId.equals(game.getPlayer1Id())) {
+            log.info("Join rejected: already in game");
             throw new AlreadyInGameException(gameId, joinerId);
         }
 
         if (!GameStates.WAITING_FOR_PLAYERS.equals(game.getState())
                 || game.getPlayer2Id() != null
                 || gamePlayerRepository.countByGameId(gameId) >= 2) {
+            log.info("Join rejected: game full or not joinable state={}", game.getState());
             throw new GameFullException(gameId);
         }
 
@@ -99,6 +107,7 @@ public class GameService {
             gamePlayerRepository.saveAndFlush(new GamePlayer(gameId, joinerId, 1));
         } catch (DataIntegrityViolationException e) {
             // UNIQUE(game_id, seat) race — another joiner took seat 1
+            log.info("Join rejected: seat race lost");
             throw new GameFullException(gameId);
         }
 
@@ -116,11 +125,13 @@ public class GameService {
         createInitialPlan(round.getId(), game.getPlayer1Id());
         createInitialPlan(round.getId(), joinerId);
 
+        log.info("Player joined; state={} round={}", game.getState(), game.getCurrentRound());
         return toGameResponse(game);
     }
 
     @Transactional(readOnly = true)
     public GameResponse getGame(UUID gameId, UUID userId) {
+        mdcGame(gameId);
         assertParticipant(gameId, userId);
         Game game = gameRepository.findById(gameId)
                 .orElseThrow(() -> new GameNotFoundException(gameId));
@@ -129,6 +140,7 @@ public class GameService {
 
     @Transactional(readOnly = true)
     public GameStateResponse getState(UUID gameId, UUID userId) {
+        mdcGame(gameId);
         assertParticipant(gameId, userId);
         Game game = gameRepository.findById(gameId)
                 .orElseThrow(() -> new GameNotFoundException(gameId));
@@ -149,22 +161,20 @@ public class GameService {
                 .findByRoundIdAndPlayerId(round.getId(), opponentId)
                 .orElseThrow(() -> new IllegalStateException("Missing plan for opponent " + opponentId));
 
-        // Opponent board/lane contents never appear here — only lock flag + keepHp stub.
-        return new GameStateResponse(
-                game.getId(),
-                game.getState(),
-                game.getCurrentRound(),
+        // Viewer projection: load opponent plan for lock flag only — never pass board_state to the mapper.
+        return GameMapper.toGameStateResponse(
+                game,
                 you.getSeat(),
-                DEFAULT_KEEP_HP,
                 yourPlan.getGold(),
-                DEFAULT_KEEP_HP,
-                0,
-                emptyBoard4x4(),
-                emptyLane(),
-                emptyShop(),
                 round.getPlanningDeadline(),
                 yourPlan.isLocked(),
                 opponentPlan.isLocked());
+    }
+
+    private static void mdcGame(UUID gameId) {
+        if (gameId != null) {
+            MDC.put("gameId", gameId.toString());
+        }
     }
 
     private void createInitialPlan(UUID roundId, UUID playerId) {
@@ -176,19 +186,12 @@ public class GameService {
 
     private GameResponse toGameResponse(Game game) {
         List<GamePlayer> seats = gamePlayerRepository.findByGameIdOrderBySeatAsc(game.getId());
-        List<PlayerSummary> players = seats.stream()
-                .map(gp -> {
-                    User u = userRepository.findById(gp.getPlayerId()).orElseThrow();
-                    int gold = resolveGold(game, gp);
-                    return new PlayerSummary(
-                            u.getId(),
-                            u.getUsername(),
-                            DEFAULT_KEEP_HP,
-                            gold,
-                            gp.getSeat(),
-                            gp.isReady());
-                })
-                .toList();
+        Map<UUID, User> usersById = new HashMap<>();
+        Map<UUID, Integer> goldByPlayerId = new HashMap<>();
+        for (GamePlayer seat : seats) {
+            usersById.put(seat.getPlayerId(), userRepository.findById(seat.getPlayerId()).orElseThrow());
+            goldByPlayerId.put(seat.getPlayerId(), resolveGold(game, seat));
+        }
 
         Instant deadline = null;
         if (game.getCurrentRound() > 0) {
@@ -198,14 +201,7 @@ public class GameService {
                     .orElse(null);
         }
 
-        return new GameResponse(
-                game.getId(),
-                game.getState(),
-                game.getCurrentRound(),
-                players,
-                deadline,
-                game.getCreatedAt(),
-                game.getStartedAt());
+        return GameMapper.toGameResponse(game, seats, usersById, goldByPlayerId, deadline);
     }
 
     // 10 while WAITING (no plan yet); plan gold once PREPARATION / round exists
@@ -218,25 +214,5 @@ public class GameService {
                 .flatMap(round -> roundPlanRepository.findByRoundIdAndPlayerId(round.getId(), seat.getPlayerId()))
                 .map(RoundPlan::getGold)
                 .orElse(STARTING_GOLD);
-    }
-
-    private static List<List<String>> emptyBoard4x4() {
-        List<List<String>> board = new ArrayList<>(4);
-        for (int y = 0; y < 4; y++) {
-            board.add(Arrays.asList(null, null, null, null));
-        }
-        return board;
-    }
-
-    private static List<LaneSlotDto> emptyLane() {
-        List<LaneSlotDto> lane = new ArrayList<>(5);
-        for (int slot = 0; slot < 5; slot++) {
-            lane.add(new LaneSlotDto(slot, null, null, null));
-        }
-        return lane;
-    }
-
-    private static List<ShopSlotDto> emptyShop() {
-        return Collections.emptyList();
     }
 }

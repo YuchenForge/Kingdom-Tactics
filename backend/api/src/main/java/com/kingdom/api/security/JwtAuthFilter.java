@@ -5,6 +5,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -35,6 +36,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             if (!token.isEmpty()) {
                 try {
                     UUID userId = jwtService.parseUserId(token);
+                    MDC.put("userId", userId.toString());
                     var auth = new UsernamePasswordAuthenticationToken(userId, null, List.of());
                     SecurityContextHolder.getContext().setAuthentication(auth);
                 } catch (JwtException | IllegalArgumentException e) {

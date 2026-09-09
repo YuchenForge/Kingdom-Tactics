@@ -7,8 +7,12 @@ import com.kingdom.api.dto.UserResponse;
 import com.kingdom.api.entity.User;
 import com.kingdom.api.exception.DuplicateUserException;
 import com.kingdom.api.exception.InvalidCredentialsException;
+import com.kingdom.api.mapper.UserMapper;
 import com.kingdom.api.repository.UserRepository;
 import com.kingdom.api.security.JwtService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -19,6 +23,8 @@ import java.util.UUID;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -49,15 +55,11 @@ public class AuthService {
                 passwordEncoder.encode(request.password()).getBytes(StandardCharsets.UTF_8));
 
         user = userRepository.save(user);
-        String token = jwtService.generateToken(user.getId());
+        MDC.put("userId", user.getId().toString());
+        log.info("User registered");
 
-        return new AuthResponse(
-                user.getId(),
-                user.getUsername(),
-                user.getEmail(),
-                token,
-                user.getCreatedAt(),
-                null);
+        String token = jwtService.generateToken(user.getId());
+        return UserMapper.toRegisterResponse(user, token);
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -69,24 +71,16 @@ public class AuthService {
             throw new InvalidCredentialsException();
         }
 
+        MDC.put("userId", user.getId().toString());
+        log.info("User logged in");
+
         String token = jwtService.generateToken(user.getId());
-        return new AuthResponse(
-                user.getId(),
-                user.getUsername(),
-                null,
-                token,
-                null,
-                jwtService.expirationSeconds());
+        return UserMapper.toLoginResponse(user, token, jwtService.expirationSeconds());
     }
 
     public UserResponse getCurrentUser(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        return new UserResponse(
-                user.getId(),
-                user.getUsername(),
-                user.getEmail(),
-                user.getRating(),
-                user.getCreatedAt());
+        return UserMapper.toUserResponse(user);
     }
 }
