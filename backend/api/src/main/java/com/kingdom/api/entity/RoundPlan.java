@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -55,6 +56,10 @@ public class RoundPlan {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     protected RoundPlan() {
     }
@@ -143,5 +148,9 @@ public class RoundPlan {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 }

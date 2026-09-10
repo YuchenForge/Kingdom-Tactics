@@ -4,7 +4,7 @@ A deployable, server-authoritative 1v1 turn-based tactical auto-battler. Players
 
 This project is designed to showcase transactional backends, deterministic domain engines, secure command processing, and production-grade observability.
 
-**Status:** Phase 1
+**Status:** Phase 2 complete — next is Phase 3 (planning commands)
 
 ---
 
@@ -105,9 +105,9 @@ cd frontend && npm run test:e2e
 | Phase | Goal | Status |
 |-------|------|--------|
 | **0** | Design & specification | ✅ Complete |
-| **1** | Pure combat engine | 📝 Next |
-| **2** | Backend foundation | ⏳ Planned |
-| **3** | Planning & commands | ⏳ Planned |
+| **1** | Pure combat engine | ✅ Complete |
+| **2** | Backend foundation | ✅ Complete |
+| **3** | Planning & commands | 📝 Next |
 | **4** | Worker & resolution | ⏳ Planned |
 | **5** | Frontend MVP | ⏳ Planned |
 | **6** | Replay & animation | ⏳ Planned |

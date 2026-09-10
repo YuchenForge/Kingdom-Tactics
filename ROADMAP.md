@@ -110,7 +110,7 @@ Output:
 
 ## Phase 2: Backend foundation and persistence
 
-**Status:** Planned (after Phase 1)
+**Status:** Complete
 
 **Goal:** Turn the engine into a secure multi-user application.
 
@@ -131,9 +131,9 @@ Output:
 - Migration scripts
 
 **Docker Compose**:
-- API container
 - PostgreSQL container
-- Redis container (for later phases)
+- Redis container (placeholder for later phases)
+- API via local `spring-boot:run` (container optional)
 
 ### Tests
 
@@ -142,6 +142,7 @@ Output:
 - Game cannot start with fewer than 2 players
 - Player cannot join twice
 - Schema migration test (Testcontainers)
+- Auth/game edge and failure ITs (duplicates, expired JWT, WAITING state, etc.)
 
 ### API endpoints
 
@@ -172,7 +173,7 @@ Two users can create and join a game and retrieve a valid PREPARATION-phase snap
 
 **Deterministic shop generation**:
 - Seeded random unit selection
-- 5 offerings per round
+- 3 offerings per round (may bump to 5 if playtests feel starved or the roster grows)
 - Refresh costs 1 gold
 
 **Command processing**:
@@ -216,7 +217,7 @@ Two users can create and join a game and retrieve a valid PREPARATION-phase snap
 ```
 POST /api/games/{gameId}/rounds/{round}/buy
      Headers: Idempotency-Key: UUID
-     Body: { shopSlot: 0-4 }
+     Body: { shopSlot: 0-2 }
 
 POST /api/games/{gameId}/rounds/{round}/refresh
 POST /api/games/{gameId}/rounds/{round}/sell
@@ -301,7 +302,7 @@ A complete 8-round match can run via API with worker resolution. Full match is r
 
 **Game board component**:
 - 4×4 CSS Grid placement board per player (local coordinates)
-- Shop display (5 unit cards)
+- Shop display (3 unit cards)
 - 5-slot holding lane per player
 - 4×8 merged combat board for replay (P0 rotated 180°; global coordinates)
 - Gold and Keep HP counters

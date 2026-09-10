@@ -31,6 +31,9 @@ public class GamePlayer {
     @Column(name = "joined_at", nullable = false)
     private Instant joinedAt;
 
+    @Column(name = "keep_hp", nullable = false)
+    private int keepHp = 20;
+
     protected GamePlayer() {
     }
 
@@ -77,5 +80,13 @@ public class GamePlayer {
 
     public Instant getJoinedAt() {
         return joinedAt;
+    }
+
+    public int getKeepHp() {
+        return keepHp;
+    }
+
+    public void setKeepHp(int keepHp) {
+        this.keepHp = keepHp;
     }
 }

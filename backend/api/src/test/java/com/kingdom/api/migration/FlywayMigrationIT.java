@@ -17,13 +17,15 @@ class FlywayMigrationIT extends AbstractPostgresIT {
         Integer migrationCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = true",
                 Integer.class);
-        assertThat(migrationCount).isEqualTo(5);
+        assertThat(migrationCount).isEqualTo(7);
 
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("games")).isTrue();
         assertThat(tableExists("game_players")).isTrue();
         assertThat(tableExists("rounds")).isTrue();
         assertThat(tableExists("round_plans")).isTrue();
+        assertThat(tableExists("shop_offers")).isTrue();
+        assertThat(tableExists("commands")).isTrue();
     }
 
     @Test
@@ -42,6 +44,20 @@ class FlywayMigrationIT extends AbstractPostgresIT {
         assertThat(foreignKeyExists("round_plans", "round_id", "rounds")).isTrue();
     }
 
+    @Test
+    void phase3TablesHaveExpectedConstraintsAndColumns() {
+        assertThat(uniqueConstraintExists("shop_offers", "shop_offers_round_id_player_id_slot_key")).isTrue();
+        assertThat(uniqueConstraintExists("commands", "commands_round_plan_id_sequence_number_key")).isTrue();
+        assertThat(uniqueConstraintExists("commands", "commands_round_plan_id_idempotency_key_key")).isTrue();
+
+        assertThat(foreignKeyExists("shop_offers", "round_id", "rounds")).isTrue();
+        assertThat(foreignKeyExists("shop_offers", "player_id", "users")).isTrue();
+        assertThat(foreignKeyExists("commands", "round_plan_id", "round_plans")).isTrue();
+
+        assertThat(columnExists("game_players", "keep_hp")).isTrue();
+        assertThat(columnExists("round_plans", "version")).isTrue();
+    }
+
     private boolean tableExists(String tableName) {
         Integer count = jdbc.queryForObject(
                 """
@@ -51,6 +67,21 @@ class FlywayMigrationIT extends AbstractPostgresIT {
                 """,
                 Integer.class,
                 tableName);
+        return count != null && count == 1;
+    }
+
+    private boolean columnExists(String tableName, String columnName) {
+        Integer count = jdbc.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = ?
+                  AND column_name = ?
+                """,
+                Integer.class,
+                tableName,
+                columnName);
         return count != null && count == 1;
     }
 
