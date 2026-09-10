@@ -39,8 +39,7 @@ public final class GameMapper {
                             user.getUsername(),
                             DEFAULT_KEEP_HP,
                             gold,
-                            gp.getSeat(),
-                            gp.isReady());
+                            gp.getSeat());
                 })
                 .toList();
 

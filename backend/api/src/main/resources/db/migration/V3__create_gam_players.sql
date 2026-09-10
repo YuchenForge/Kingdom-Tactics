@@ -3,7 +3,6 @@ CREATE TABLE game_players (
     game_id    UUID      NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     player_id  UUID      NOT NULL REFERENCES users(id),
     seat       INTEGER   NOT NULL,   -- 0 or 1
-    is_ready   BOOLEAN   NOT NULL DEFAULT FALSE,
     joined_at  TIMESTAMP NOT NULL DEFAULT now(),
 
     UNIQUE (game_id, player_id),

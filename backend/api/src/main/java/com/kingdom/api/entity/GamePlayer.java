@@ -28,9 +28,6 @@ public class GamePlayer {
     @Column(nullable = false)
     private int seat;
 
-    @Column(name = "is_ready", nullable = false)
-    private boolean ready = false;
-
     @Column(name = "joined_at", nullable = false)
     private Instant joinedAt;
 
@@ -76,14 +73,6 @@ public class GamePlayer {
 
     public void setSeat(int seat) {
         this.seat = seat;
-    }
-
-    public boolean isReady() {
-        return ready;
-    }
-
-    public void setReady(boolean ready) {
-        this.ready = ready;
     }
 
     public Instant getJoinedAt() {

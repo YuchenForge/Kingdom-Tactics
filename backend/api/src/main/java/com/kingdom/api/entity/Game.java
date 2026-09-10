@@ -22,6 +22,8 @@ public class Game {
     @Column(name = "player_1_id", nullable = false)
     private UUID player1Id;
 
+    // Denormalized convenience columns; authoritative seats live in game_players.
+    // create/join must keep player_1/2_id and game_players rows in sync.
     @Column(name = "player_2_id")
     private UUID player2Id; // null until join
 

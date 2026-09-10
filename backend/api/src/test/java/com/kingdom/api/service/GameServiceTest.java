@@ -10,6 +10,7 @@ import com.kingdom.api.entity.User;
 import com.kingdom.api.exception.AlreadyInGameException;
 import com.kingdom.api.exception.GameFullException;
 import com.kingdom.api.exception.GameNotFoundException;
+import com.kingdom.api.exception.GameNotReadyException;
 import com.kingdom.api.exception.NotGameParticipantException;
 import com.kingdom.api.repository.GamePlayerRepository;
 import com.kingdom.api.repository.GameRepository;
@@ -208,12 +209,36 @@ class GameServiceTest {
     }
 
     @Test
+    void joinGame_creatorJoiningOwnGame_throwsAlreadyInGame() {
+        Game game = waitingGame(creatorId);
+        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
+        // Seat row missing, but player1Id still matches — second OR branch
+        when(gamePlayerRepository.existsByGameIdAndPlayerId(gameId, creatorId)).thenReturn(false);
+
+        assertThatThrownBy(() -> gameService.joinGame(gameId, creatorId))
+                .isInstanceOf(AlreadyInGameException.class);
+
+        verify(gamePlayerRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void getState_asNonParticipant_throwsNotGameParticipantException() {
         when(gameRepository.existsById(gameId)).thenReturn(true);
         when(gamePlayerRepository.existsByGameIdAndPlayerId(gameId, userId)).thenReturn(false);
 
         assertThatThrownBy(() -> gameService.getState(gameId, userId))
                 .isInstanceOf(NotGameParticipantException.class);
+    }
+
+    @Test
+    void getState_whileWaiting_throwsGameNotReady() {
+        Game game = waitingGame(creatorId);
+        when(gameRepository.existsById(gameId)).thenReturn(true);
+        when(gamePlayerRepository.existsByGameIdAndPlayerId(gameId, creatorId)).thenReturn(true);
+        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
+
+        assertThatThrownBy(() -> gameService.getState(gameId, creatorId))
+                .isInstanceOf(GameNotReadyException.class);
     }
 
     private Game waitingGame(UUID player1Id) {

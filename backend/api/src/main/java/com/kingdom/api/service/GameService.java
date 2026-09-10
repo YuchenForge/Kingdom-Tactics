@@ -61,7 +61,7 @@ public class GameService {
         this.userRepository = userRepository;
     }
 
-    // Call at the start of every game-scoped read/action once controllers exist.
+    // Call at the start of every game-scoped read/action.
     // Skip for POST /games (no game yet) and POST /games/{id}/join (caller not a participant yet).
     public void assertParticipant(UUID gameId, UUID userId) {
         mdcGame(gameId);

@@ -1,18 +1,13 @@
 package com.kingdom.api.game;
 
+import com.kingdom.api.support.AbstractPostgresIT;
+import com.kingdom.api.support.TestAuthSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
@@ -22,36 +17,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@Testcontainers
-@ActiveProfiles("test")
-class GameLifecycleIT {
-
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-            .withDatabaseName("kingdom_tactics_test")
-            .withUsername("test")
-            .withPassword("test");
-
-    @DynamicPropertySource
-    static void configureDatasource(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("app.jwt.secret", () -> "test-jwt-secret-at-least-32-bytes!");
-        registry.add("app.jwt.expiration-ms", () -> "3600000");
-    }
+class GameLifecycleIT extends AbstractPostgresIT {
 
     @Autowired
     private MockMvc mockMvc;
 
     @Test
     void createJoinStateAndAuthzFlow() throws Exception {
-        String tokenAlice = register("alice", "alice@test.com");
-        String tokenBob = register("bob", "bob@test.com");
-        String tokenCharlie = register("charlie", "charlie@test.com");
-        String tokenCarol = register("carol", "carol@test.com");
+        String tokenAlice = TestAuthSupport.register(mockMvc, "alice", "alice@test.com");
+        String tokenBob = TestAuthSupport.register(mockMvc, "bob", "bob@test.com");
+        String tokenCharlie = TestAuthSupport.register(mockMvc, "charlie", "charlie@test.com");
+        String tokenCarol = TestAuthSupport.register(mockMvc, "carol", "carol@test.com");
 
         mockMvc.perform(post("/api/games"))
                 .andExpect(status().isUnauthorized())
@@ -71,7 +47,7 @@ class GameLifecycleIT {
                 .andExpect(jsonPath("$.createdAt").exists())
                 .andReturn();
 
-        String gameId = extractJsonField(createResult.getResponse().getContentAsString(), "gameId");
+        String gameId = TestAuthSupport.extractJsonField(createResult.getResponse().getContentAsString(), "gameId");
         assertThat(gameId).isNotBlank();
 
         mockMvc.perform(post("/api/games/" + gameId + "/join")
@@ -117,33 +93,35 @@ class GameLifecycleIT {
                 .andExpect(jsonPath("$.error").value("GAME_FULL"));
     }
 
-    private String register(String username, String email) throws Exception {
-        String body = """
-                {
-                  "username": "%s",
-                  "email": "%s",
-                  "password": "password123"
-                }
-                """.formatted(username, email);
+    @Test
+    void joinMissingGameReturns404() throws Exception {
+        String token = TestAuthSupport.register(mockMvc, "alice", "alice@test.com");
 
-        MvcResult result = mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.token", notNullValue()))
-                .andReturn();
-
-        return extractJsonField(result.getResponse().getContentAsString(), "token");
+        mockMvc.perform(post("/api/games/" + UUID.randomUUID() + "/join")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("GAME_NOT_FOUND"));
     }
 
-    private static String extractJsonField(String json, String field) {
-        String marker = "\"" + field + "\":\"";
-        int start = json.indexOf(marker);
-        if (start < 0) {
-            throw new IllegalStateException("Field not found: " + field);
-        }
-        start += marker.length();
-        int end = json.indexOf('"', start);
-        return json.substring(start, end);
+    @Test
+    void getStateWhileWaitingReturns409() throws Exception {
+        String aliceToken = TestAuthSupport.register(mockMvc, "alice", "alice@test.com");
+        String gameId = TestAuthSupport.createGame(mockMvc, aliceToken);
+
+        mockMvc.perform(get("/api/games/" + gameId + "/state")
+                        .header("Authorization", "Bearer " + aliceToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("GAME_NOT_READY"));
+    }
+
+    @Test
+    void creatorJoiningOwnGameReturns400() throws Exception {
+        String aliceToken = TestAuthSupport.register(mockMvc, "alice", "alice@test.com");
+        String gameId = TestAuthSupport.createGame(mockMvc, aliceToken);
+
+        mockMvc.perform(post("/api/games/" + gameId + "/join")
+                        .header("Authorization", "Bearer " + aliceToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("ALREADY_IN_GAME"));
     }
 }

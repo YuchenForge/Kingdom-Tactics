@@ -56,6 +56,14 @@ public class GlobalExceptionHandler {
                 .body(error("UNAUTHORIZED", "Invalid email or password", HttpStatus.UNAUTHORIZED.value()));
     }
 
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ApiError> userNotFound(UserNotFoundException ex) {
+        log.info("Authenticated user missing from database");
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(error("UNAUTHORIZED", "User not found", HttpStatus.UNAUTHORIZED.value()));
+    }
+
     @ExceptionHandler(GameNotFoundException.class)
     public ResponseEntity<ApiError> gameNotFound(GameNotFoundException ex) {
         log.info("Game not found");

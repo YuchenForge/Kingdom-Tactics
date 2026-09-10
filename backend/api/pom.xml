@@ -85,11 +85,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
             <scope>runtime</scope>
@@ -100,6 +95,12 @@
         <plugins>
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

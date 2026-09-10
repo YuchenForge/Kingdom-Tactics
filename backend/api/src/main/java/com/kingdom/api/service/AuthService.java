@@ -7,13 +7,14 @@ import com.kingdom.api.dto.UserResponse;
 import com.kingdom.api.entity.User;
 import com.kingdom.api.exception.DuplicateUserException;
 import com.kingdom.api.exception.InvalidCredentialsException;
+import com.kingdom.api.exception.UserNotFoundException;
 import com.kingdom.api.mapper.UserMapper;
 import com.kingdom.api.repository.UserRepository;
 import com.kingdom.api.security.JwtService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,7 +55,15 @@ public class AuthService {
                 email,
                 passwordEncoder.encode(request.password()).getBytes(StandardCharsets.UTF_8));
 
-        user = userRepository.save(user);
+        try {
+            user = userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            // UNIQUE(email) / UNIQUE(username) race — another request won the insert.
+            // Do not re-query: Postgres has aborted this transaction after DIV.
+            log.info("Registration rejected: unique constraint race");
+            throw new DuplicateUserException(duplicateFieldFrom(e));
+        }
+
         MDC.put("userId", user.getId().toString());
         log.info("User registered");
 
@@ -80,7 +89,13 @@ public class AuthService {
 
     public UserResponse getCurrentUser(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException(userId));
         return UserMapper.toUserResponse(user);
+    }
+
+    /** Prefer username when the constraint name says so; otherwise email. No DB access. */
+    private static String duplicateFieldFrom(DataIntegrityViolationException e) {
+        String detail = String.valueOf(e.getMostSpecificCause().getMessage()).toLowerCase();
+        return detail.contains("username") ? "username" : "email";
     }
 }

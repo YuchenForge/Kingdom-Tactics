@@ -6,6 +6,7 @@ import com.kingdom.api.dto.RegisterRequest;
 import com.kingdom.api.entity.User;
 import com.kingdom.api.exception.DuplicateUserException;
 import com.kingdom.api.exception.InvalidCredentialsException;
+import com.kingdom.api.exception.UserNotFoundException;
 import com.kingdom.api.repository.UserRepository;
 import com.kingdom.api.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -54,7 +56,7 @@ class AuthServiceTest {
 
         when(userRepository.existsByEmail("alice@test.com")).thenReturn(false);
         when(userRepository.existsByUsername("alice")).thenReturn(false);
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
             ReflectionTestUtils.setField(user, "id", userId);
             ReflectionTestUtils.invokeMethod(user, "onCreate");
@@ -72,7 +74,7 @@ class AuthServiceTest {
         assertThat(response.expiresIn()).isNull();
 
         ArgumentCaptor<User> savedUser = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(savedUser.capture());
+        verify(userRepository).saveAndFlush(savedUser.capture());
 
         byte[] storedHash = savedUser.getValue().getPasswordHash();
         String hashString = new String(storedHash, StandardCharsets.UTF_8);
@@ -124,5 +126,42 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("a@test.com", "wrong-password")))
                 .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    @Test
+    void getCurrentUserMissingUserThrows() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.getCurrentUser(userId))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    @Test
+    void registerUniqueRaceMapsToDuplicateEmail() {
+        RegisterRequest request = new RegisterRequest("alice", "a@test.com", "password123");
+        when(userRepository.existsByEmail("a@test.com")).thenReturn(false);
+        when(userRepository.existsByUsername("alice")).thenReturn(false);
+        when(userRepository.saveAndFlush(any(User.class)))
+                .thenThrow(new DataIntegrityViolationException("unique_users_email"));
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(DuplicateUserException.class)
+                .extracting(ex -> ((DuplicateUserException) ex).getField())
+                .isEqualTo("email");
+    }
+
+    @Test
+    void registerUniqueRaceMapsToDuplicateUsername() {
+        RegisterRequest request = new RegisterRequest("alice", "a@test.com", "password123");
+        when(userRepository.existsByEmail("a@test.com")).thenReturn(false);
+        when(userRepository.existsByUsername("alice")).thenReturn(false);
+        when(userRepository.saveAndFlush(any(User.class)))
+                .thenThrow(new DataIntegrityViolationException("users_username_key"));
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(DuplicateUserException.class)
+                .extracting(ex -> ((DuplicateUserException) ex).getField())
+                .isEqualTo("username");
     }
 }

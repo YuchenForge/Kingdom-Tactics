@@ -7,7 +7,6 @@ public record PlayerSummary(
         String username,
         int keepHp,
         int gold,
-        int seat,
-        Boolean isReady // null on create/join if omitted
+        int seat
 ) {
 }
