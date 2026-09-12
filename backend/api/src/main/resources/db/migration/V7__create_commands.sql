@@ -3,7 +3,7 @@ CREATE TABLE commands (
     round_plan_id   UUID      NOT NULL REFERENCES round_plans(id) ON DELETE CASCADE,
     sequence_number INTEGER   NOT NULL,
     command_type    VARCHAR(50) NOT NULL,
-    -- BUY_UNIT, SELL_UNIT, PLACE_UNIT, MOVE_UNIT, REFRESH_SHOP, LOCK_BOARD
+    -- BUY_UNIT, SELL_UNIT, RELOCATE_UNIT, REFRESH_SHOP, LOCK_BOARD
     parameters      JSONB     NOT NULL,
     idempotency_key UUID      NOT NULL,
     executed_at     TIMESTAMP NOT NULL DEFAULT now(),

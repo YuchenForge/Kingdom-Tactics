@@ -1,12 +1,10 @@
-package com.kingdom.engine.cli;
+package com.kingdom.engine.domain;
 
 import java.util.Map;
 import java.util.function.Supplier;
 
-import com.kingdom.engine.domain.UnitDefinition;
-
 /**
- * Translates the CLI/JSON-facing unit type name (e.g. "Squire") into a domain. 
+ * Resolves shop/CLI/JSON unit type names to UnitDefinition.
  */
 public final class UnitTypeResolver {
 
@@ -27,9 +25,14 @@ public final class UnitTypeResolver {
         Supplier<UnitDefinition> factory = FACTORIES.get(type);
         if (factory == null) {
             throw new IllegalArgumentException(
-                "Unknown unit type in replay file: \"" + type + "\". "
-                + "Valid types: " + FACTORIES.keySet());
+                "Unknown unit type: \"" + type + "\". "
+                    + "Valid types: " + FACTORIES.keySet());
         }
         return factory.get();
+    }
+
+    /** True if type is one of the six recruitable unit names. */
+    public static boolean isKnownType(String type) {
+        return type != null && FACTORIES.containsKey(type);
     }
 }

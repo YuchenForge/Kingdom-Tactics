@@ -3,6 +3,7 @@ package com.kingdom.engine.cli;
 import com.kingdom.engine.domain.Board;
 import com.kingdom.engine.domain.UnitDefinition;
 import com.kingdom.engine.domain.UnitInstance;
+import com.kingdom.engine.domain.UnitTypeResolver;
 
 /**
  * Converts CLI-facing DTOs into domain objects. 

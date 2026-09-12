@@ -180,8 +180,7 @@ Two users can create and join a game and retrieve a valid PREPARATION-phase snap
 - `BUY_UNIT(shopSlot)` — Check gold, deduct, add Level 1 unit to holding lane (max 5); run auto-merge when 3+ copies of same `(type, level)` exist on lane + board
 - `SELL_UNIT(unitId)` — Remove, refund `base_cost × level`
 - `REFRESH_SHOP()` — Generate new offers (1 gold cost)
-- `PLACE_UNIT(unitId, x, y)` — Move from lane to placement board (any empty cell, local coords)
-- `MOVE_UNIT(unitId, x, y)` — Move on placement board (any empty cell, local coords)
+- `RELOCATE_UNIT(unitId, to)` — Move unit to `Board(x,y)` or `Lane(slot)` (lane↔board, reorder, reposition)
 - `LOCK_BOARD()` — Submit final plan
 
 **Unit leveling** (see `docs/rules.md` §5):
@@ -204,7 +203,7 @@ Two users can create and join a game and retrieve a valid PREPARATION-phase snap
 ### Tests
 
 - Cannot buy without gold
-- Cannot place outside board bounds
+- Cannot relocate outside board bounds or to an occupied lane slot
 - Cannot exceed unit cap or lane capacity
 - Auto-merge when 3+ copies of same `(type, level)` on lane + board (e.g. 2 on board + 3rd buy)
 - Sell refund scales with level (`base_cost × level`)
@@ -221,8 +220,7 @@ POST /api/games/{gameId}/rounds/{round}/buy
 
 POST /api/games/{gameId}/rounds/{round}/refresh
 POST /api/games/{gameId}/rounds/{round}/sell
-POST /api/games/{gameId}/rounds/{round}/place
-POST /api/games/{gameId}/rounds/{round}/move
+POST /api/games/{gameId}/rounds/{round}/relocate
 POST /api/games/{gameId}/rounds/{round}/lock
 ```
 
