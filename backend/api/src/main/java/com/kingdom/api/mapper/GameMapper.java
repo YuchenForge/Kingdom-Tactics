@@ -12,7 +12,6 @@ import com.kingdom.api.entity.User;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -59,7 +58,8 @@ public final class GameMapper {
             int yourGold,
             Instant planningDeadline,
             boolean isLocked,
-            boolean opponentIsLocked) {
+            boolean opponentIsLocked,
+            List<ShopSlotDto> shop) {
         return new GameStateResponse(
                 game.getId(),
                 game.getState(),
@@ -71,7 +71,7 @@ public final class GameMapper {
                 0,
                 emptyBoard4x4(),
                 emptyLane(),
-                emptyShop(),
+                shop,
                 planningDeadline,
                 isLocked,
                 opponentIsLocked);
@@ -93,10 +93,5 @@ public final class GameMapper {
             lane.add(new LaneSlotDto(slot, null, null, null));
         }
         return lane;
-    }
-
-    /** Phase 2 stub: no shop offers yet. */
-    static List<ShopSlotDto> emptyShop() {
-        return Collections.emptyList();
     }
 }

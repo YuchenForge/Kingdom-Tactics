@@ -16,6 +16,7 @@ import com.kingdom.api.repository.GamePlayerRepository;
 import com.kingdom.api.repository.GameRepository;
 import com.kingdom.api.repository.RoundPlanRepository;
 import com.kingdom.api.repository.RoundRepository;
+import com.kingdom.api.repository.ShopOfferRepository;
 import com.kingdom.api.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,6 +60,12 @@ class GameServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private ShopOfferRepository shopOfferRepository;
+
+    @Mock
+    private ShopService shopService;
+
     private GameService gameService;
 
     private final UUID gameId = UUID.randomUUID();
@@ -73,7 +80,9 @@ class GameServiceTest {
                 gamePlayerRepository,
                 roundRepository,
                 roundPlanRepository,
-                userRepository);
+                userRepository,
+                shopOfferRepository,
+                shopService);
     }
 
     @Test
@@ -130,6 +139,7 @@ class GameServiceTest {
         assertThat(seatCaptor.getValue().getSeat()).isZero();
         assertThat(seatCaptor.getValue().getPlayerId()).isEqualTo(creatorId);
         assertThat(seatCaptor.getValue().getGameId()).isEqualTo(gameId);
+        verifyNoInteractions(shopService);
     }
 
     @Test
@@ -179,6 +189,11 @@ class GameServiceTest {
                 .containsExactly(GameService.STARTING_GOLD, GameService.STARTING_GOLD);
         assertThat(planCaptor.getAllValues()).extracting(RoundPlan::getPlayerId)
                 .containsExactlyInAnyOrder(creatorId, joinerId);
+
+        ArgumentCaptor<Round> roundCaptor = ArgumentCaptor.forClass(Round.class);
+        verify(shopService).createShopsForRound(roundCaptor.capture(), eq(gameId), eq(creatorId), eq(joinerId));
+        assertThat(roundCaptor.getValue().getId()).isEqualTo(roundId);
+        assertThat(roundCaptor.getValue().getRoundNumber()).isEqualTo(1);
     }
 
     @Test

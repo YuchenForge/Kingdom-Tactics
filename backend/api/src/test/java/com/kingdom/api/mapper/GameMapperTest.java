@@ -2,6 +2,7 @@ package com.kingdom.api.mapper;
 
 import com.kingdom.api.dto.GameResponse;
 import com.kingdom.api.dto.GameStateResponse;
+import com.kingdom.api.dto.ShopSlotDto;
 import com.kingdom.api.entity.Game;
 import com.kingdom.api.entity.GamePlayer;
 import com.kingdom.api.entity.GameStates;
@@ -59,8 +60,12 @@ class GameMapperTest {
         game.setCurrentRound(1);
 
         Instant deadline = Instant.parse("2024-01-15T14:24:30Z");
+        List<ShopSlotDto> shop = List.of(
+                new ShopSlotDto(0, "Squire", 1),
+                new ShopSlotDto(1, "Mage", 3),
+                new ShopSlotDto(2, "Ranger", 2));
         GameStateResponse response = GameMapper.toGameStateResponse(
-                game, 0, 10, deadline, false, true);
+                game, 0, 10, deadline, false, true, shop);
 
         assertThat(response.gameId()).isEqualTo(gameId);
         assertThat(response.yourSeat()).isEqualTo(0);
@@ -68,7 +73,7 @@ class GameMapperTest {
         assertThat(response.yourBoard()).hasSize(4);
         assertThat(response.yourBoard().get(0)).hasSize(4);
         assertThat(response.yourLane()).hasSize(5);
-        assertThat(response.shop()).isEmpty();
+        assertThat(response.shop()).isEqualTo(shop);
         assertThat(response.opponentUnitCount()).isEqualTo(0);
         assertThat(response.opponentIsLocked()).isTrue();
         assertThat(response.isLocked()).isFalse();

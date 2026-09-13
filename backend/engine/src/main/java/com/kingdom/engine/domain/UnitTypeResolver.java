@@ -1,5 +1,6 @@
 package com.kingdom.engine.domain;
 
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -7,6 +8,19 @@ import java.util.function.Supplier;
  * Resolves shop/CLI/JSON unit type names to UnitDefinition.
  */
 public final class UnitTypeResolver {
+
+    /**
+     * Fixed recruitment order — used by shop RNG for deterministic draws.
+     * Do not reorder without migrating seed expectations.
+     */
+    public static final List<String> ORDERED_TYPES = List.of(
+            "Squire",
+            "Shieldbearer",
+            "Ranger",
+            "Knight",
+            "Mage",
+            "Healer"
+    );
 
     private static final Map<String, Supplier<UnitDefinition>> FACTORIES = Map.of(
             "Squire", UnitDefinition::squire,

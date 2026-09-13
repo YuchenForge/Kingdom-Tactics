@@ -73,9 +73,27 @@ class GameLifecycleIT extends AbstractPostgresIT {
                 .andExpect(jsonPath("$.yourBoard[0]", hasSize(4)))
                 .andExpect(jsonPath("$.yourLane", hasSize(5)))
                 .andExpect(jsonPath("$.shop").isArray())
-                .andExpect(jsonPath("$.shop", hasSize(0)))
+                .andExpect(jsonPath("$.shop", hasSize(3)))
+                .andExpect(jsonPath("$.shop[0].slot").value(0))
+                .andExpect(jsonPath("$.shop[0].unitType").isString())
+                .andExpect(jsonPath("$.shop[0].cost").isNumber())
+                .andExpect(jsonPath("$.shop[1].slot").value(1))
+                .andExpect(jsonPath("$.shop[1].unitType").isString())
+                .andExpect(jsonPath("$.shop[1].cost").isNumber())
+                .andExpect(jsonPath("$.shop[2].slot").value(2))
+                .andExpect(jsonPath("$.shop[2].unitType").isString())
+                .andExpect(jsonPath("$.shop[2].cost").isNumber())
                 .andExpect(jsonPath("$.opponentUnitCount").value(0))
                 .andExpect(jsonPath("$.opponentBoard").doesNotExist());
+
+        mockMvc.perform(get("/api/games/" + gameId + "/state")
+                        .header("Authorization", "Bearer " + tokenBob))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.yourSeat").value(1))
+                .andExpect(jsonPath("$.shop", hasSize(3)))
+                .andExpect(jsonPath("$.shop[0].slot").value(0))
+                .andExpect(jsonPath("$.shop[0].unitType").isString())
+                .andExpect(jsonPath("$.shop[0].cost").isNumber());
 
         mockMvc.perform(get("/api/games/" + gameId + "/state")
                         .header("Authorization", "Bearer " + tokenCharlie))

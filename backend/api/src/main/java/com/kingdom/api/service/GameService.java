@@ -7,6 +7,7 @@ import com.kingdom.api.entity.GamePlayer;
 import com.kingdom.api.entity.GameStates;
 import com.kingdom.api.entity.Round;
 import com.kingdom.api.entity.RoundPlan;
+import com.kingdom.api.entity.ShopOffer;
 import com.kingdom.api.entity.User;
 import com.kingdom.api.exception.AlreadyInGameException;
 import com.kingdom.api.exception.GameFullException;
@@ -18,6 +19,7 @@ import com.kingdom.api.repository.GamePlayerRepository;
 import com.kingdom.api.repository.GameRepository;
 import com.kingdom.api.repository.RoundPlanRepository;
 import com.kingdom.api.repository.RoundRepository;
+import com.kingdom.api.repository.ShopOfferRepository;
 import com.kingdom.api.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,18 +49,24 @@ public class GameService {
     private final RoundRepository roundRepository;
     private final RoundPlanRepository roundPlanRepository;
     private final UserRepository userRepository;
+    private final ShopOfferRepository shopOfferRepository;
+    private final ShopService shopService;
 
     public GameService(
             GameRepository gameRepository,
             GamePlayerRepository gamePlayerRepository,
             RoundRepository roundRepository,
             RoundPlanRepository roundPlanRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            ShopOfferRepository shopOfferRepository,
+            ShopService shopService) {
         this.gameRepository = gameRepository;
         this.gamePlayerRepository = gamePlayerRepository;
         this.roundRepository = roundRepository;
         this.roundPlanRepository = roundPlanRepository;
         this.userRepository = userRepository;
+        this.shopOfferRepository = shopOfferRepository;
+        this.shopService = shopService;
     }
 
     // Call at the start of every game-scoped read/action.
@@ -83,7 +91,7 @@ public class GameService {
         return toGameResponse(game);
     }
 
-    // One transaction: seat 1 + game → PREPARATION + round 1 + two plans.
+    // One transaction: seat 1 + game → PREPARATION + round 1 + two plans + shops.
     @Transactional
     public GameResponse joinGame(UUID gameId, UUID joinerId) {
         mdcGame(gameId);
@@ -124,6 +132,7 @@ public class GameService {
 
         createInitialPlan(round.getId(), game.getPlayer1Id());
         createInitialPlan(round.getId(), joinerId);
+        shopService.createShopsForRound(round, gameId, game.getPlayer1Id(), joinerId);
 
         log.info("Player joined; state={} round={}", game.getState(), game.getCurrentRound());
         return toGameResponse(game);
@@ -161,6 +170,10 @@ public class GameService {
                 .findByRoundIdAndPlayerId(round.getId(), opponentId)
                 .orElseThrow(() -> new IllegalStateException("Missing plan for opponent " + opponentId));
 
+        // Viewer shop only — never load opponent offers.
+        List<ShopOffer> offers = shopOfferRepository
+                .findByRoundIdAndPlayerIdOrderBySlotAsc(round.getId(), userId);
+
         // Viewer projection: load opponent plan for lock flag only — never pass board_state to the mapper.
         return GameMapper.toGameStateResponse(
                 game,
@@ -168,7 +181,8 @@ public class GameService {
                 yourPlan.getGold(),
                 round.getPlanningDeadline(),
                 yourPlan.isLocked(),
-                opponentPlan.isLocked());
+                opponentPlan.isLocked(),
+                shopService.toDtos(offers));
     }
 
     private static void mdcGame(UUID gameId) {
