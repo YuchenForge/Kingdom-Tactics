@@ -1,6 +1,8 @@
 package com.kingdom.api.service;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
 import org.mockito.Mock;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -60,6 +63,8 @@ class CommandServiceImplTest {
     @Mock
     private ShopService shopService;
     @Mock
+    private PlanningDeadlineService planningDeadlineService;
+    @Mock
     private PlatformTransactionManager transactionManager;
     @Mock
     private TransactionStatus transactionStatus;
@@ -82,6 +87,8 @@ class CommandServiceImplTest {
     void setUp() {
         lenient().when(transactionManager.getTransaction(any(TransactionDefinition.class)))
                 .thenReturn(transactionStatus);
+        lenient().when(planningDeadlineService.enforceDeadlineOrAutoLock(any(), any()))
+                .thenReturn(false);
 
         commandService = new CommandServiceImpl(
                 gameService,
@@ -91,6 +98,8 @@ class CommandServiceImplTest {
                 commandRepository,
                 shopService,
                 new CommandApplier(() -> "unit-test-1"),
+                planningDeadlineService,
+                Clock.fixed(Instant.parse("2024-06-01T12:00:00Z"), ZoneOffset.UTC),
                 transactionManager);
 
         // Create a game
@@ -108,7 +117,7 @@ class CommandServiceImplTest {
         plan = new RoundPlan(roundId, aliceId, 10);
         ReflectionTestUtils.setField(plan, "id", planId);
     }
-    
+
     @Test
     void buy_persistsPlanShopAndCommand() {
         stubHappyPath();
@@ -185,6 +194,62 @@ class CommandServiceImplTest {
     }
 
     @Test
+    void buy_idempotentRetry_whenGameLocked_returnsSnapshot() {
+        game.setState(GameStates.LOCKED);
+        round.setState(GameStates.LOCKED);
+        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
+        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
+        when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
+                .thenReturn(Optional.of(new Command(planId, 0, CommandServiceImpl.TYPE_BUY, null, key)));
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+
+        CommandResponse response = commandService.buy(gameId, 1, aliceId, key, 0);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.gold()).isEqualTo(10);
+        verify(shopService, never()).consumeOffer(any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void buy_pastDeadline_throwsDeadlinePassedWithoutApplying() {
+        stubHappyPath();
+        when(planningDeadlineService.enforceDeadlineOrAutoLock(game, round)).thenReturn(true);
+
+        assertThatThrownBy(() -> commandService.buy(gameId, 1, aliceId, key, 0))
+                .isInstanceOf(PlanningCommandException.class)
+                .satisfies(ex -> {
+                    PlanningCommandException pce = (PlanningCommandException) ex;
+                    assertThat(pce.getError()).isEqualTo(PlanningError.DEADLINE_PASSED);
+                    assertThat(pce.httpStatus()).isEqualTo(423);
+                    assertThat(pce.errorCode()).isEqualTo("DEADLINE_PASSED");
+                });
+
+        verify(shopService, never()).loadShop(any(), any());
+        verify(shopService, never()).consumeOffer(any(), any(), any(Integer.class));
+        verify(commandRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void buy_pastDeadline_idempotentRetry_returnsSnapshot() {
+        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
+        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
+        when(planningDeadlineService.enforceDeadlineOrAutoLock(game, round)).thenReturn(true);
+        when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
+                .thenReturn(Optional.of(new Command(planId, 0, CommandServiceImpl.TYPE_BUY, null, key)));
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+
+        CommandResponse response = commandService.buy(gameId, 1, aliceId, key, 0);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.gold()).isEqualTo(10);
+        verify(shopService, never()).consumeOffer(any(), any(), any(Integer.class));
+    }
+
+    @Test
     void buy_insufficientGold_throwsPlanningCommandException() {
         plan.setGold(0);
         stubHappyPath();
@@ -205,6 +270,8 @@ class CommandServiceImplTest {
         when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
         when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
         when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
+        when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
+                .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> commandService.buy(gameId, 1, aliceId, key, 0))
                 .isInstanceOf(RoundLockedException.class);
@@ -262,6 +329,11 @@ class CommandServiceImplTest {
         when(commandRepository.countByRoundPlanId(planId)).thenReturn(0);
         when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, bobId))
                 .thenReturn(Optional.of(bobPlan));
+        doAnswer(invocation -> {
+            game.setState(GameStates.LOCKED);
+            round.setState(GameStates.LOCKED);
+            return null;
+        }).when(planningDeadlineService).maybeTransitionBothLocked(game, round);
 
         CommandResponse response = commandService.lock(gameId, 1, aliceId, key);
 
@@ -270,8 +342,7 @@ class CommandServiceImplTest {
         assertThat(response.nextState()).isEqualTo(GameStates.LOCKED);
         assertThat(game.getState()).isEqualTo(GameStates.LOCKED);
         assertThat(round.getState()).isEqualTo(GameStates.LOCKED);
-        verify(gameRepository).save(game);
-        verify(roundRepository).save(round);
+        verify(planningDeadlineService).maybeTransitionBothLocked(game, round);
     }
 
     // Pretend the DB/lookups succeed for a normal command

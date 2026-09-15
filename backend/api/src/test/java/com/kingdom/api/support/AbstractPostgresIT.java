@@ -39,5 +39,6 @@ public abstract class AbstractPostgresIT {
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("app.jwt.secret", () -> TEST_JWT_SECRET);
         registry.add("app.jwt.expiration-ms", () -> "3600000");
+        registry.add("app.scheduling.enabled", () -> "false");
     }
 }

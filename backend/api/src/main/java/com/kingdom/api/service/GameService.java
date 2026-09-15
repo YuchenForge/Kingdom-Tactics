@@ -30,6 +30,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -52,6 +53,8 @@ public class GameService {
     private final RoundPlanRepository roundPlanRepository;
     private final UserRepository userRepository;
     private final ShopService shopService;
+    private final PlanningDeadlineService planningDeadlineService;
+    private final Clock clock;
 
     public GameService(
             GameRepository gameRepository,
@@ -59,13 +62,17 @@ public class GameService {
             RoundRepository roundRepository,
             RoundPlanRepository roundPlanRepository,
             UserRepository userRepository,
-            ShopService shopService) {
+            ShopService shopService,
+            PlanningDeadlineService planningDeadlineService,
+            Clock clock) {
         this.gameRepository = gameRepository;
         this.gamePlayerRepository = gamePlayerRepository;
         this.roundRepository = roundRepository;
         this.roundPlanRepository = roundPlanRepository;
         this.userRepository = userRepository;
         this.shopService = shopService;
+        this.planningDeadlineService = planningDeadlineService;
+        this.clock = clock;
     }
 
     // Call at the start of every game-scoped read/action.
@@ -122,7 +129,7 @@ public class GameService {
         game.setState(GameStates.PREPARATION);
         game.setCurrentRound(1);
 
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Round round = roundRepository.save(new Round(
                 gameId,
                 1,
@@ -137,21 +144,21 @@ public class GameService {
         return toGameResponse(game);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public GameResponse getGame(UUID gameId, UUID userId) {
         mdcGame(gameId);
         assertParticipant(gameId, userId);
-        Game game = gameRepository.findById(gameId)
-                .orElseThrow(() -> new GameNotFoundException(gameId));
+        Game game = loadGame(gameId);
+        game = maybeFinalizeExpiredPlanning(game);
         return toGameResponse(game);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public GameStateResponse getState(UUID gameId, UUID userId) {
         mdcGame(gameId);
         assertParticipant(gameId, userId);
-        Game game = gameRepository.findById(gameId)
-                .orElseThrow(() -> new GameNotFoundException(gameId));
+        Game game = loadGame(gameId);
+        game = maybeFinalizeExpiredPlanning(game);
 
         if (GameStates.WAITING_FOR_PLAYERS.equals(game.getState())) {
             throw new GameNotReadyException(gameId);
@@ -191,6 +198,23 @@ public class GameService {
                 round.getPlanningDeadline(),
                 yourPlan.isLocked(),
                 opponentPlan.isLocked());
+    }
+
+    private Game loadGame(UUID gameId) {
+        return gameRepository.findById(gameId)
+                .orElseThrow(() -> new GameNotFoundException(gameId));
+    }
+
+    /**
+     * Read-path opportunistic lock: client still does a GET, but the server may
+     * finalize an expired PREPARATION round before building the response.
+     */
+    private Game maybeFinalizeExpiredPlanning(Game game) {
+        if (!GameStates.PREPARATION.equals(game.getState())) {
+            return game;
+        }
+        planningDeadlineService.autoLockIfDeadlinePassed(game.getId());
+        return loadGame(game.getId());
     }
 
     private static int countUnits(PlanningState state) {

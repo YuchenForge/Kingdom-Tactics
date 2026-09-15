@@ -1,6 +1,7 @@
 package com.kingdom.api.service;
 
 import com.kingdom.api.dto.ShopSlotDto;
+import com.kingdom.api.entity.GameStates;
 import com.kingdom.api.entity.Round;
 import com.kingdom.api.entity.ShopOffer;
 import com.kingdom.api.repository.ShopOfferRepository;
@@ -68,7 +69,7 @@ class ShopServiceTest {
 
     @Test
     void createShopsForRound_createsBothPlayers() {
-        Round round = new Round(gameId, 2, "PLANNING", java.time.Instant.now());
+        Round round = new Round(gameId, 2, GameStates.PREPARATION, java.time.Instant.now());
         ReflectionTestUtils.setField(round, "id", roundId);
 
         shopService.createShopsForRound(round, gameId, playerId, player2Id);

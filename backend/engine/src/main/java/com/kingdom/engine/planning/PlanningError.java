@@ -10,6 +10,9 @@ public enum PlanningError {
     /** Lock command when already locked (→ 423). */
     ALREADY_LOCKED(423),
 
+    /** Planning deadline expired; mutation not applied (→ 423). */
+    DEADLINE_PASSED(423),
+
     /** Not enough gold for buy or refresh (→ 400). */
     INSUFFICIENT_GOLD(400),
 

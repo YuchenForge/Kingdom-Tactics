@@ -69,6 +69,10 @@ class GameLifecycleIT extends AbstractPostgresIT {
                 .andExpect(jsonPath("$.gameId").exists())
                 .andExpect(jsonPath("$.yourSeat").value(0))
                 .andExpect(jsonPath("$.yourGold").value(10))
+                .andExpect(jsonPath("$.yourKeepHp").value(20))
+                .andExpect(jsonPath("$.opponentKeepHp").value(20))
+                .andExpect(jsonPath("$.isLocked").value(false))
+                .andExpect(jsonPath("$.opponentIsLocked").value(false))
                 .andExpect(jsonPath("$.yourBoard", hasSize(4)))
                 .andExpect(jsonPath("$.yourBoard[0]", hasSize(4)))
                 .andExpect(jsonPath("$.yourLane", hasSize(5)))
@@ -84,7 +88,9 @@ class GameLifecycleIT extends AbstractPostgresIT {
                 .andExpect(jsonPath("$.shop[2].unitType").isString())
                 .andExpect(jsonPath("$.shop[2].cost").isNumber())
                 .andExpect(jsonPath("$.opponentUnitCount").value(0))
-                .andExpect(jsonPath("$.opponentBoard").doesNotExist());
+                .andExpect(jsonPath("$.opponentBoard").doesNotExist())
+                .andExpect(jsonPath("$.opponentShop").doesNotExist())
+                .andExpect(jsonPath("$.opponentLane").doesNotExist());
 
         mockMvc.perform(get("/api/games/" + gameId + "/state")
                         .header("Authorization", "Bearer " + tokenBob))

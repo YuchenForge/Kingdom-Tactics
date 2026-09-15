@@ -4,7 +4,7 @@ A deployable, server-authoritative 1v1 turn-based tactical auto-battler. Players
 
 This project is designed to showcase transactional backends, deterministic domain engines, secure command processing, and production-grade observability.
 
-**Status:** Phase 2 complete — next is Phase 3 (planning commands)
+**Status:** Phase 3 complete — next is Phase 4 (worker + round resolution)
 
 ---
 

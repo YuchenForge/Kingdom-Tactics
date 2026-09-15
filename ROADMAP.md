@@ -165,7 +165,7 @@ Two users can create and join a game and retrieve a valid PREPARATION-phase snap
 
 ## Phase 3: Planning phase and command processing
 
-**Status:** Planned (after Phase 2)
+**Status:** Complete ✅
 
 **Goal:** Implement the auto-battler management loop.
 

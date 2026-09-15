@@ -40,6 +40,16 @@ class PlanningStateMapperTest {
     }
 
     @Test
+    void lockedPlanMapsLockedFlagIntoPlanningState() {
+        RoundPlan plan = emptyJoinPlan(10);
+        plan.setLocked(true);
+
+        PlanningState state = PlanningStateMapper.toPlanningState(plan, PlanningShop.empty(), 1);
+
+        assertThat(state.isLocked()).isTrue();
+    }
+
+    @Test
     void emptyJoinPlanRoundTripsCleanly() {
         RoundPlan plan = emptyJoinPlan(10);
         PlanningShop shop = PlanningShop.empty();

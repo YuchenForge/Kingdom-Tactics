@@ -99,6 +99,84 @@ class CommandServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void buy_asNonParticipant_returns403() throws Exception {
+        JoinedGame game = joinTwoPlayers("outsider");
+        String charlieToken = TestAuthSupport.register(mockMvc, "cmd_charlie", "cmd_charlie@test.com");
+
+        mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/buy")
+                        .header("Authorization", "Bearer " + charlieToken)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shopSlot\":0}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error", is("NOT_GAME_PARTICIPANT")));
+    }
+
+    @Test
+    void buy_whileWaiting_returns404RoundNotFound() throws Exception {
+        MvcResult aliceReg = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"cmd_wait_a","email":"cmd_wait_a@test.com","password":"password123"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String aliceToken = TestAuthSupport.extractJsonField(
+                aliceReg.getResponse().getContentAsString(), "token");
+        String gameId = TestAuthSupport.createGame(mockMvc, aliceToken);
+
+        // No round exists until the second player joins — cannot reach PREPARATION guards yet.
+        mockMvc.perform(post("/api/games/" + gameId + "/rounds/1/buy")
+                        .header("Authorization", "Bearer " + aliceToken)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shopSlot\":0}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", is("ROUND_NOT_FOUND")));
+    }
+
+    @Test
+    void afterOwnLock_buyRejected_opponentStillActs() throws Exception {
+        JoinedGame game = joinTwoPlayers("ownlock");
+
+        mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/lock")
+                        .header("Authorization", "Bearer " + game.aliceToken())
+                        .header("Idempotency-Key", UUID.randomUUID().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isLocked", is(true)))
+                .andExpect(jsonPath("$.opponentIsLocked", is(false)));
+
+        mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/buy")
+                        .header("Authorization", "Bearer " + game.aliceToken())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shopSlot\":0}"))
+                .andExpect(status().isLocked())
+                .andExpect(jsonPath("$.error", is("LOCKED")));
+
+        mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/relocate")
+                        .header("Authorization", "Bearer " + game.aliceToken())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"unitId":"nope","to":{"type":"BOARD","x":0,"y":0}}
+                                """))
+                .andExpect(status().isLocked())
+                .andExpect(jsonPath("$.error", is("LOCKED")));
+
+        mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/buy")
+                        .header("Authorization", "Bearer " + game.bobToken())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shopSlot\":0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success", is(true)));
+
+        Game stillPrep = gameRepository.findById(UUID.fromString(game.gameId())).orElseThrow();
+        assertThat(stillPrep.getState()).isEqualTo(GameStates.PREPARATION);
+    }
+
+    @Test
     void planningFlow_relocateLockBoth_thenBuyRejectedAndShopHidden() throws Exception {
         JoinedGame game = joinTwoPlayers("flow");
         int expectedGold = 10 - shopSlotCost(game.gameId(), game.aliceToken(), 0);
@@ -170,6 +248,16 @@ class CommandServiceIT extends AbstractPostgresIT {
                 .andExpect(status().isLocked())
                 .andExpect(jsonPath("$.error", is("LOCKED")));
 
+        mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/relocate")
+                        .header("Authorization", "Bearer " + game.aliceToken())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"unitId":"%s","to":{"type":"LANE","slot":0}}
+                                """.formatted(unitId)))
+                .andExpect(status().isLocked())
+                .andExpect(jsonPath("$.error", is("LOCKED")));
+
         // Bob's GET /state shop is his own offers — never Alice's.
         MvcResult bobState = mockMvc.perform(get("/api/games/" + game.gameId() + "/state")
                         .header("Authorization", "Bearer " + game.bobToken()))
@@ -187,6 +275,67 @@ class CommandServiceIT extends AbstractPostgresIT {
         assertThat(bobShop.toString()).isNotEqualTo(aliceShop.toString());
         // Opponent board never exposed as yourBoard for Bob (Alice's unit is not Bob's board).
         assertThat(bobState.getResponse().getContentAsString()).doesNotContain(unitId);
+    }
+
+    @Test
+    void refresh_costsOneGold_replacesAllShopSlots() throws Exception {
+        JoinedGame game = joinTwoPlayers("refresh");
+
+        MvcResult stateBefore = mockMvc.perform(get("/api/games/" + game.gameId() + "/state")
+                        .header("Authorization", "Bearer " + game.aliceToken()))
+                .andExpect(status().isOk())
+                .andReturn();
+        String shopBefore = objectMapper.readTree(stateBefore.getResponse().getContentAsString())
+                .path("shop")
+                .toString();
+
+        MvcResult refreshResult = mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/refresh")
+                        .header("Authorization", "Bearer " + game.aliceToken())
+                        .header("Idempotency-Key", UUID.randomUUID().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success", is(true)))
+                .andExpect(jsonPath("$.gold", is(9)))
+                .andExpect(jsonPath("$.shop", hasSize(3)))
+                .andExpect(jsonPath("$.shop[0].unitType", notNullValue()))
+                .andExpect(jsonPath("$.shop[1].unitType", notNullValue()))
+                .andExpect(jsonPath("$.shop[2].unitType", notNullValue()))
+                .andReturn();
+
+        String shopAfter = objectMapper.readTree(refreshResult.getResponse().getContentAsString())
+                .path("shop")
+                .toString();
+        assertThat(shopAfter).isNotEqualTo(shopBefore);
+    }
+
+    @Test
+    void sell_afterBuy_refundsGoldAndRemovesUnitFromLane() throws Exception {
+        JoinedGame game = joinTwoPlayers("sell");
+        int cost = shopSlotCost(game.gameId(), game.aliceToken(), 0);
+
+        MvcResult buyResult = mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/buy")
+                        .header("Authorization", "Bearer " + game.aliceToken())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shopSlot\":0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gold", is(10 - cost)))
+                .andReturn();
+
+        String unitId = objectMapper.readTree(buyResult.getResponse().getContentAsString())
+                .path("lane")
+                .get(0)
+                .path("unitId")
+                .asText();
+
+        mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/sell")
+                        .header("Authorization", "Bearer " + game.aliceToken())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"unitId\":\"" + unitId + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success", is(true)))
+                .andExpect(jsonPath("$.gold", is(10)))
+                .andExpect(jsonPath("$.lane[0].unitId", nullValue()));
     }
 
     private UUID alicePlanId(JoinedGame game) {

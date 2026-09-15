@@ -1,6 +1,7 @@
 package com.kingdom.api.service;
 
 import com.kingdom.api.dto.GameResponse;
+import com.kingdom.api.dto.GameStateResponse;
 import com.kingdom.api.entity.Game;
 import com.kingdom.api.entity.GamePlayer;
 import com.kingdom.api.entity.GameStates;
@@ -17,6 +18,7 @@ import com.kingdom.api.repository.GameRepository;
 import com.kingdom.api.repository.RoundPlanRepository;
 import com.kingdom.api.repository.RoundRepository;
 import com.kingdom.api.repository.UserRepository;
+import com.kingdom.engine.planning.PlanningShop;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,7 +28,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,6 +47,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class GameServiceTest {
+
+    private static final Instant FIXED_NOW = Instant.parse("2024-06-01T12:00:00Z");
 
     @Mock
     private GameRepository gameRepository;
@@ -62,6 +68,9 @@ class GameServiceTest {
     @Mock
     private ShopService shopService;
 
+    @Mock
+    private PlanningDeadlineService planningDeadlineService;
+
     private GameService gameService;
 
     private final UUID gameId = UUID.randomUUID();
@@ -77,7 +86,9 @@ class GameServiceTest {
                 roundRepository,
                 roundPlanRepository,
                 userRepository,
-                shopService);
+                shopService,
+                planningDeadlineService,
+                Clock.fixed(FIXED_NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -189,6 +200,8 @@ class GameServiceTest {
         verify(shopService).createShopsForRound(roundCaptor.capture(), eq(gameId), eq(creatorId), eq(joinerId));
         assertThat(roundCaptor.getValue().getId()).isEqualTo(roundId);
         assertThat(roundCaptor.getValue().getRoundNumber()).isEqualTo(1);
+        assertThat(roundCaptor.getValue().getPlanningDeadline())
+                .isEqualTo(FIXED_NOW.plusSeconds(GameService.PLANNING_SECONDS));
     }
 
     @Test
@@ -249,6 +262,88 @@ class GameServiceTest {
 
         assertThatThrownBy(() -> gameService.getState(gameId, creatorId))
                 .isInstanceOf(GameNotReadyException.class);
+
+        verify(planningDeadlineService, never()).autoLockIfDeadlinePassed(any());
+    }
+
+    @Test
+    void getState_whenPreparation_attemptsDeadlineFinalize() {
+        UUID roundId = UUID.randomUUID();
+        Game game = waitingGame(creatorId);
+        game.setPlayer2Id(joinerId);
+        game.setState(GameStates.PREPARATION);
+        game.setCurrentRound(1);
+
+        Game locked = waitingGame(creatorId);
+        locked.setPlayer2Id(joinerId);
+        locked.setState(GameStates.LOCKED);
+        locked.setCurrentRound(1);
+
+        Round round = new Round(gameId, 1, GameStates.LOCKED, Instant.now().minusSeconds(1));
+        ReflectionTestUtils.setField(round, "id", roundId);
+
+        RoundPlan yourPlan = new RoundPlan(roundId, creatorId, 10);
+        yourPlan.setLocked(true);
+        RoundPlan opponentPlan = new RoundPlan(roundId, joinerId, 10);
+        opponentPlan.setLocked(true);
+
+        when(gameRepository.existsById(gameId)).thenReturn(true);
+        when(gamePlayerRepository.existsByGameIdAndPlayerId(gameId, creatorId)).thenReturn(true);
+        when(gameRepository.findById(gameId))
+                .thenReturn(Optional.of(game))
+                .thenReturn(Optional.of(locked));
+        when(gamePlayerRepository.findByGameIdAndPlayerId(gameId, creatorId))
+                .thenReturn(Optional.of(new GamePlayer(gameId, creatorId, 0)));
+        when(gamePlayerRepository.findByGameIdAndPlayerId(gameId, joinerId))
+                .thenReturn(Optional.of(new GamePlayer(gameId, joinerId, 1)));
+        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, creatorId))
+                .thenReturn(Optional.of(yourPlan));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, joinerId))
+                .thenReturn(Optional.of(opponentPlan));
+        when(shopService.loadShop(roundId, creatorId)).thenReturn(PlanningShop.empty());
+
+        GameStateResponse response = gameService.getState(gameId, creatorId);
+
+        verify(planningDeadlineService).autoLockIfDeadlinePassed(gameId);
+        assertThat(response.state()).isEqualTo(GameStates.LOCKED);
+        assertThat(response.isLocked()).isTrue();
+        assertThat(response.opponentIsLocked()).isTrue();
+    }
+
+    @Test
+    void getGame_whenPreparation_attemptsDeadlineFinalize() {
+        Game game = waitingGame(creatorId);
+        game.setPlayer2Id(joinerId);
+        game.setState(GameStates.PREPARATION);
+        game.setCurrentRound(1);
+
+        Game locked = waitingGame(creatorId);
+        locked.setPlayer2Id(joinerId);
+        locked.setState(GameStates.LOCKED);
+        locked.setCurrentRound(1);
+
+        UUID roundId = UUID.randomUUID();
+        when(gameRepository.existsById(gameId)).thenReturn(true);
+        when(gamePlayerRepository.existsByGameIdAndPlayerId(gameId, creatorId)).thenReturn(true);
+        when(gameRepository.findById(gameId))
+                .thenReturn(Optional.of(game))
+                .thenReturn(Optional.of(locked));
+        when(gamePlayerRepository.findByGameIdOrderBySeatAsc(gameId)).thenReturn(List.of(
+                new GamePlayer(gameId, creatorId, 0),
+                new GamePlayer(gameId, joinerId, 1)));
+        when(userRepository.findById(creatorId)).thenReturn(Optional.of(user("alice", creatorId)));
+        when(userRepository.findById(joinerId)).thenReturn(Optional.of(user("bob", joinerId)));
+        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(
+                new Round(gameId, 1, GameStates.LOCKED, Instant.now().minusSeconds(1))));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(any(), eq(creatorId)))
+                .thenReturn(Optional.of(new RoundPlan(roundId, creatorId, 10)));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(any(), eq(joinerId)))
+                .thenReturn(Optional.of(new RoundPlan(roundId, joinerId, 10)));
+
+        gameService.getGame(gameId, creatorId);
+
+        verify(planningDeadlineService).autoLockIfDeadlinePassed(gameId);
     }
 
     private Game waitingGame(UUID player1Id) {

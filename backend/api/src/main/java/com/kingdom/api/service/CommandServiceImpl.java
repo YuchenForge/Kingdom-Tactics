@@ -21,6 +21,7 @@ import com.kingdom.api.repository.RoundPlanRepository;
 import com.kingdom.api.repository.RoundRepository;
 import com.kingdom.engine.planning.CommandApplier;
 import com.kingdom.engine.planning.PlanningCommand;
+import com.kingdom.engine.planning.PlanningError;
 import com.kingdom.engine.planning.PlanningResult;
 import com.kingdom.engine.planning.PlanningShop;
 import com.kingdom.engine.planning.PlanningState;
@@ -35,7 +36,7 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +61,8 @@ public class CommandServiceImpl implements CommandService {
     private final CommandRepository commandRepository;
     private final ShopService shopService;
     private final CommandApplier commandApplier;
+    private final PlanningDeadlineService planningDeadlineService;
+    private final Clock clock;
     private final TransactionTemplate requiresNewTx;
 
     public CommandServiceImpl(
@@ -70,6 +73,8 @@ public class CommandServiceImpl implements CommandService {
             CommandRepository commandRepository,
             ShopService shopService,
             CommandApplier commandApplier,
+            PlanningDeadlineService planningDeadlineService,
+            Clock clock,
             PlatformTransactionManager transactionManager) {
         this.gameService = gameService;
         this.gameRepository = gameRepository;
@@ -78,6 +83,8 @@ public class CommandServiceImpl implements CommandService {
         this.commandRepository = commandRepository;
         this.shopService = shopService;
         this.commandApplier = commandApplier;
+        this.planningDeadlineService = planningDeadlineService;
+        this.clock = clock;
         this.requiresNewTx = new TransactionTemplate(transactionManager);
         this.requiresNewTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -181,18 +188,32 @@ public class CommandServiceImpl implements CommandService {
             Function<CommandContext, PreparedCommand> prepare) {
 
         mdcGame(gameId);
+        // 1. participant
         gameService.assertParticipant(gameId, userId);
 
-        // Load game, round, plan and make sure the game is in PREPARATION state
+        // 2. load
         CommandContext ctx = loadContext(gameId, roundNumber, userId);
+
+        // 3. guard PREPARATION / current round (LOCKED deferred to step 5 for idempotency)
         guardPreparation(ctx, roundNumber);
 
-        // Check if the command is idempotent, if it is, return the current response
+        // 4. deadline → auto-lock unlocked plans (may transition to LOCKED)
+        boolean pastDeadline = planningDeadlineService.enforceDeadlineOrAutoLock(
+                ctx.game(), ctx.round());
+
+        // 5. if locked / past deadline: idempotent hit → snapshot; else → 423
         if (commandRepository
                 .findByRoundPlanIdAndIdempotencyKey(ctx.plan().getId(), idempotencyKey)
                 .isPresent()) {
             log.info("Idempotent hit commandTypeEndpoint={}", lockEndpoint ? TYPE_LOCK : "MUTATION");
             return currentResponse(ctx, lockEndpoint);
+        }
+        if (pastDeadline) {
+            throw new PlanningCommandException(PlanningError.DEADLINE_PASSED);
+        }
+        if (GameStates.LOCKED.equals(ctx.game().getState())
+                || GameStates.LOCKED.equals(ctx.round().getState())) {
+            throw new RoundLockedException(ctx.game().getId());
         }
 
         // Prepare the command 
@@ -206,12 +227,11 @@ public class CommandServiceImpl implements CommandService {
             throw new PlanningCommandException(result.getError());
         }
 
-        // If successful, update the plan
         PlanningState next = result.getState();
         try {
             PlanningStateMapper.applyToPlan(ctx.plan(), next);
             if (lockEndpoint && next.isLocked() && ctx.plan().getLockedAt() == null) {
-                ctx.plan().setLockedAt(Instant.now());
+                ctx.plan().setLockedAt(clock.instant());
             }
             if (prepared.afterSuccess() != null) {
                 prepared.afterSuccess().run();
@@ -261,19 +281,22 @@ public class CommandServiceImpl implements CommandService {
         return new CommandContext(game, round, plan, userId);
     }
 
-    // Make sure the game is in PREPARATION state
+    /**
+     * Allows PREPARATION and LOCKED through so step 5 can return an idempotent
+     * snapshot after lock. Other states / wrong round still fail here.
+     */
     private static void guardPreparation(CommandContext ctx, int roundNumber) {
         Game game = ctx.game();
         Round round = ctx.round();
 
-        if (GameStates.LOCKED.equals(game.getState()) || GameStates.LOCKED.equals(round.getState())) {
-            throw new RoundLockedException(game.getId());
-        }
         if (GameStates.WAITING_FOR_PLAYERS.equals(game.getState())) {
             throw new GameNotReadyException(game.getId());
         }
-        if (!GameStates.PREPARATION.equals(game.getState())
-                || !GameStates.PREPARATION.equals(round.getState())) {
+        boolean preparation = GameStates.PREPARATION.equals(game.getState())
+                && GameStates.PREPARATION.equals(round.getState());
+        boolean locked = GameStates.LOCKED.equals(game.getState())
+                || GameStates.LOCKED.equals(round.getState());
+        if (!preparation && !locked) {
             throw new WrongGameStateException(
                     game.getId(),
                     "Game is not in PREPARATION (state=" + game.getState() + ")");
@@ -288,15 +311,7 @@ public class CommandServiceImpl implements CommandService {
 
     // If both players are locked, transition the game and round to LOCKED state
     private void maybeTransitionBothLocked(CommandContext ctx) {
-        RoundPlan opponent = opponentPlan(ctx);
-        if (!opponent.isLocked()) {
-            return;
-        }
-        ctx.game().setState(GameStates.LOCKED);
-        ctx.round().setState(GameStates.LOCKED);
-        gameRepository.save(ctx.game());
-        roundRepository.save(ctx.round());
-        log.info("Both players locked; game={} → LOCKED", ctx.game().getId());
+        planningDeadlineService.maybeTransitionBothLocked(ctx.game(), ctx.round());
     }
 
     // Load the opponent's plan
