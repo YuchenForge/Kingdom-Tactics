@@ -72,7 +72,7 @@
                     <version>2.22.2</version>
                     <configuration>
                         <!-- @{argLine} keeps JaCoCo's javaagent when prepare-agent runs -->
-                        <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
+                        <argLine>@{argLine} -Dnet.bytebuddy.experimental=true -Dapi.version=1.44</argLine>
                         <includes>
                             <include>**/*Test.java</include>
                             <include>**/*IT.java</include>

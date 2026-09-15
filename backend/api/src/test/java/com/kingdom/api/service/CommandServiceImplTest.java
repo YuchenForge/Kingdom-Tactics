@@ -1,0 +1,293 @@
+package com.kingdom.api.service;
+
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import static org.mockito.ArgumentMatchers.any;
+import org.mockito.Mock;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+
+import com.kingdom.api.dto.CommandResponse;
+import com.kingdom.api.entity.Command;
+import com.kingdom.api.entity.Game;
+import com.kingdom.api.entity.GameStates;
+import com.kingdom.api.entity.Round;
+import com.kingdom.api.entity.RoundPlan;
+import com.kingdom.api.exception.ConflictException;
+import com.kingdom.api.exception.GameNotReadyException;
+import com.kingdom.api.exception.PlanningCommandException;
+import com.kingdom.api.exception.RoundLockedException;
+import com.kingdom.api.exception.WrongGameStateException;
+import com.kingdom.api.repository.CommandRepository;
+import com.kingdom.api.repository.GameRepository;
+import com.kingdom.api.repository.RoundPlanRepository;
+import com.kingdom.api.repository.RoundRepository;
+import com.kingdom.engine.planning.CommandApplier;
+import com.kingdom.engine.planning.PlanningError;
+import com.kingdom.engine.planning.PlanningShop;
+
+@ExtendWith(MockitoExtension.class)
+class CommandServiceImplTest {
+
+    // Mock dependencies
+    @Mock
+    private GameService gameService;
+    @Mock
+    private GameRepository gameRepository;
+    @Mock
+    private RoundRepository roundRepository;
+    @Mock
+    private RoundPlanRepository roundPlanRepository;
+    @Mock
+    private CommandRepository commandRepository;
+    @Mock
+    private ShopService shopService;
+    @Mock
+    private PlatformTransactionManager transactionManager;
+    @Mock
+    private TransactionStatus transactionStatus;
+
+    private CommandServiceImpl commandService;
+
+    // Test data: stable ids for testing
+    private final UUID gameId = UUID.randomUUID();
+    private final UUID roundId = UUID.randomUUID();
+    private final UUID planId = UUID.randomUUID();
+    private final UUID aliceId = UUID.randomUUID();
+    private final UUID bobId = UUID.randomUUID();
+    private final UUID key = UUID.randomUUID();
+
+    private Game game;
+    private Round round;
+    private RoundPlan plan;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(transactionManager.getTransaction(any(TransactionDefinition.class)))
+                .thenReturn(transactionStatus);
+
+        commandService = new CommandServiceImpl(
+                gameService,
+                gameRepository,
+                roundRepository,
+                roundPlanRepository,
+                commandRepository,
+                shopService,
+                new CommandApplier(() -> "unit-test-1"),
+                transactionManager);
+
+        // Create a game
+        game = Game.create(aliceId);
+        ReflectionTestUtils.setField(game, "id", gameId);
+        game.setPlayer2Id(bobId);
+        game.setState(GameStates.PREPARATION);
+        game.setCurrentRound(1);
+
+        // Create a round
+        round = new Round(gameId, 1, GameStates.PREPARATION, Instant.now().plusSeconds(45));
+        ReflectionTestUtils.setField(round, "id", roundId);
+
+        // Create a plan
+        plan = new RoundPlan(roundId, aliceId, 10);
+        ReflectionTestUtils.setField(plan, "id", planId);
+    }
+    
+    @Test
+    void buy_persistsPlanShopAndCommand() {
+        stubHappyPath();
+        stubPersists();
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+        when(commandRepository.countByRoundPlanId(planId)).thenReturn(0);
+
+        CommandResponse response = commandService.buy(gameId, 1, aliceId, key, 0);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.gold()).isEqualTo(9);
+        assertThat(response.lane().get(0).unitType()).isEqualTo("Squire");
+        assertThat(plan.getGold()).isEqualTo(9);
+        verify(shopService).consumeOffer(roundId, aliceId, 0);
+        verify(roundPlanRepository).saveAndFlush(plan);
+
+        ArgumentCaptor<Command> commandCaptor = ArgumentCaptor.forClass(Command.class);
+        verify(commandRepository).saveAndFlush(commandCaptor.capture());
+        assertThat(commandCaptor.getValue().getCommandType()).isEqualTo(CommandServiceImpl.TYPE_BUY);
+        assertThat(commandCaptor.getValue().getIdempotencyKey()).isEqualTo(key);
+        assertThat(commandCaptor.getValue().getSequenceNumber()).isZero();
+    }
+
+    @Test
+    void buy_optimisticLockOnPlan_throwsConflict() {
+        stubHappyPath();
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+        when(roundPlanRepository.saveAndFlush(any(RoundPlan.class)))
+                .thenThrow(new OptimisticLockingFailureException("stale version"));
+
+        assertThatThrownBy(() -> commandService.buy(gameId, 1, aliceId, key, 0))
+                .isInstanceOf(ConflictException.class)
+                .extracting(ex -> ((ConflictException) ex).getCode())
+                .isEqualTo("CONFLICT");
+    }
+
+    @Test
+    void buy_duplicateIdempotencyKey_returnsCommittedSnapshot() {
+        stubHappyPath();
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+        when(roundPlanRepository.saveAndFlush(any(RoundPlan.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(commandRepository.countByRoundPlanId(planId)).thenReturn(0);
+        when(commandRepository.saveAndFlush(any(Command.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "commands_round_plan_id_idempotency_key_key"));
+
+        // UNIQUE race: winner committed; loser reloads and returns the snapshot (not 409).
+        CommandResponse response = commandService.buy(gameId, 1, aliceId, key, 0);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.gold()).isEqualTo(9);
+    }
+
+    @Test
+    void buy_idempotentRetry_doesNotReapply() {
+        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
+        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
+        when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
+                .thenReturn(Optional.of(new Command(planId, 0, CommandServiceImpl.TYPE_BUY, null, key)));
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+
+        CommandResponse response = commandService.buy(gameId, 1, aliceId, key, 0);
+
+        assertThat(response.gold()).isEqualTo(10);
+        verify(shopService, never()).consumeOffer(any(), any(), any(Integer.class));
+        verify(commandRepository, never()).saveAndFlush(any());
+        verify(roundPlanRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void buy_insufficientGold_throwsPlanningCommandException() {
+        plan.setGold(0);
+        stubHappyPath();
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+
+        assertThatThrownBy(() -> commandService.buy(gameId, 1, aliceId, key, 0))
+                .isInstanceOf(PlanningCommandException.class)
+                .extracting(ex -> ((PlanningCommandException) ex).getError())
+                .isEqualTo(PlanningError.INSUFFICIENT_GOLD);
+
+        verify(shopService, never()).consumeOffer(any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void buy_whenGameLocked_throwsRoundLockedException() {
+        game.setState(GameStates.LOCKED);
+        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
+        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
+
+        assertThatThrownBy(() -> commandService.buy(gameId, 1, aliceId, key, 0))
+                .isInstanceOf(RoundLockedException.class);
+    }
+
+    @Test
+    void buy_wrongCurrentRound_throwsWrongGameState() {
+        game.setCurrentRound(2);
+        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
+        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
+
+        assertThatThrownBy(() -> commandService.buy(gameId, 1, aliceId, key, 0))
+                .isInstanceOf(WrongGameStateException.class);
+    }
+
+    @Test
+    void buy_whenPlanLocked_throwsPlanningLocked() {
+        plan.setLocked(true);
+        stubHappyPath();
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+
+        assertThatThrownBy(() -> commandService.buy(gameId, 1, aliceId, key, 0))
+                .isInstanceOf(PlanningCommandException.class)
+                .satisfies(ex -> {
+                    PlanningCommandException pce = (PlanningCommandException) ex;
+                    assertThat(pce.getError()).isEqualTo(PlanningError.LOCKED);
+                    assertThat(pce.httpStatus()).isEqualTo(423);
+                });
+
+        verify(shopService, never()).consumeOffer(any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void buy_whenWaiting_throwsGameNotReady() {
+        game.setState(GameStates.WAITING_FOR_PLAYERS);
+        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
+        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
+
+        assertThatThrownBy(() -> commandService.buy(gameId, 1, aliceId, key, 0))
+                .isInstanceOf(GameNotReadyException.class);
+    }
+
+    @Test
+    void lock_bothPlayers_transitionsGameToLocked() {
+        stubHappyPath();
+        stubPersists();
+        RoundPlan bobPlan = new RoundPlan(roundId, bobId, 10);
+        ReflectionTestUtils.setField(bobPlan, "id", UUID.randomUUID());
+        bobPlan.setLocked(true);
+
+        when(shopService.loadShop(roundId, aliceId)).thenReturn(PlanningShop.empty());
+        when(commandRepository.countByRoundPlanId(planId)).thenReturn(0);
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, bobId))
+                .thenReturn(Optional.of(bobPlan));
+
+        CommandResponse response = commandService.lock(gameId, 1, aliceId, key);
+
+        assertThat(response.isLocked()).isTrue();
+        assertThat(response.opponentIsLocked()).isTrue();
+        assertThat(response.nextState()).isEqualTo(GameStates.LOCKED);
+        assertThat(game.getState()).isEqualTo(GameStates.LOCKED);
+        assertThat(round.getState()).isEqualTo(GameStates.LOCKED);
+        verify(gameRepository).save(game);
+        verify(roundRepository).save(round);
+    }
+
+    // Pretend the DB/lookups succeed for a normal command
+    private void stubHappyPath() {
+        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
+        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
+        when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
+                .thenReturn(Optional.empty());
+    }
+
+    // Pretend saves work normally
+    private void stubPersists() {
+        when(roundPlanRepository.saveAndFlush(any(RoundPlan.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(commandRepository.saveAndFlush(any(Command.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+}

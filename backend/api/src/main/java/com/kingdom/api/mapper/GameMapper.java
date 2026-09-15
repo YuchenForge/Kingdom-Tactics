@@ -10,15 +10,11 @@ import com.kingdom.api.entity.GamePlayer;
 import com.kingdom.api.entity.User;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public final class GameMapper {
-
-    private static final int DEFAULT_KEEP_HP = 20;
 
     private GameMapper() {
     }
@@ -36,7 +32,7 @@ public final class GameMapper {
                     return new PlayerSummary(
                             user.getId(),
                             user.getUsername(),
-                            DEFAULT_KEEP_HP,
+                            gp.getKeepHp(),
                             gold,
                             gp.getSeat());
                 })
@@ -55,43 +51,30 @@ public final class GameMapper {
     public static GameStateResponse toGameStateResponse(
             Game game,
             int yourSeat,
+            int yourKeepHp,
             int yourGold,
+            int opponentKeepHp,
+            int opponentUnitCount,
+            List<List<String>> yourBoard,
+            List<LaneSlotDto> yourLane,
+            List<ShopSlotDto> shop,
             Instant planningDeadline,
             boolean isLocked,
-            boolean opponentIsLocked,
-            List<ShopSlotDto> shop) {
+            boolean opponentIsLocked) {
         return new GameStateResponse(
                 game.getId(),
                 game.getState(),
                 game.getCurrentRound(),
                 yourSeat,
-                DEFAULT_KEEP_HP,
+                yourKeepHp,
                 yourGold,
-                DEFAULT_KEEP_HP,
-                0,
-                emptyBoard4x4(),
-                emptyLane(),
+                opponentKeepHp,
+                opponentUnitCount,
+                yourBoard,
+                yourLane,
                 shop,
                 planningDeadline,
                 isLocked,
                 opponentIsLocked);
-    }
-
-    /** Phase 2 stub: empty board until placement exists. */
-    static List<List<String>> emptyBoard4x4() {
-        List<List<String>> board = new ArrayList<>(4);
-        for (int y = 0; y < 4; y++) {
-            board.add(Arrays.asList(null, null, null, null));
-        }
-        return board;
-    }
-
-    /** Phase 2 stub: five empty lane slots. */
-    static List<LaneSlotDto> emptyLane() {
-        List<LaneSlotDto> lane = new ArrayList<>(5);
-        for (int slot = 0; slot < 5; slot++) {
-            lane.add(new LaneSlotDto(slot, null, null, null));
-        }
-        return lane;
     }
 }

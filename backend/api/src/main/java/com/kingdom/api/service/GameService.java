@@ -7,7 +7,6 @@ import com.kingdom.api.entity.GamePlayer;
 import com.kingdom.api.entity.GameStates;
 import com.kingdom.api.entity.Round;
 import com.kingdom.api.entity.RoundPlan;
-import com.kingdom.api.entity.ShopOffer;
 import com.kingdom.api.entity.User;
 import com.kingdom.api.exception.AlreadyInGameException;
 import com.kingdom.api.exception.GameFullException;
@@ -15,12 +14,15 @@ import com.kingdom.api.exception.GameNotFoundException;
 import com.kingdom.api.exception.GameNotReadyException;
 import com.kingdom.api.exception.NotGameParticipantException;
 import com.kingdom.api.mapper.GameMapper;
+import com.kingdom.api.mapper.PlanningStateMapper;
 import com.kingdom.api.repository.GamePlayerRepository;
 import com.kingdom.api.repository.GameRepository;
 import com.kingdom.api.repository.RoundPlanRepository;
 import com.kingdom.api.repository.RoundRepository;
-import com.kingdom.api.repository.ShopOfferRepository;
 import com.kingdom.api.repository.UserRepository;
+import com.kingdom.engine.planning.PlanningShop;
+import com.kingdom.engine.planning.PlanningState;
+import com.kingdom.engine.planning.PlanningUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -49,7 +51,6 @@ public class GameService {
     private final RoundRepository roundRepository;
     private final RoundPlanRepository roundPlanRepository;
     private final UserRepository userRepository;
-    private final ShopOfferRepository shopOfferRepository;
     private final ShopService shopService;
 
     public GameService(
@@ -58,14 +59,12 @@ public class GameService {
             RoundRepository roundRepository,
             RoundPlanRepository roundPlanRepository,
             UserRepository userRepository,
-            ShopOfferRepository shopOfferRepository,
             ShopService shopService) {
         this.gameRepository = gameRepository;
         this.gamePlayerRepository = gamePlayerRepository;
         this.roundRepository = roundRepository;
         this.roundPlanRepository = roundPlanRepository;
         this.userRepository = userRepository;
-        this.shopOfferRepository = shopOfferRepository;
         this.shopService = shopService;
     }
 
@@ -169,20 +168,39 @@ public class GameService {
         RoundPlan opponentPlan = roundPlanRepository
                 .findByRoundIdAndPlayerId(round.getId(), opponentId)
                 .orElseThrow(() -> new IllegalStateException("Missing plan for opponent " + opponentId));
+        GamePlayer opponent = gamePlayerRepository.findByGameIdAndPlayerId(gameId, opponentId)
+                .orElseThrow(() -> new IllegalStateException("Missing seat for opponent " + opponentId));
 
         // Viewer shop only — never load opponent offers.
-        List<ShopOffer> offers = shopOfferRepository
-                .findByRoundIdAndPlayerIdOrderBySlotAsc(round.getId(), userId);
+        PlanningShop yourShop = shopService.loadShop(round.getId(), userId);
+        PlanningState yourState = PlanningStateMapper.toPlanningState(
+                yourPlan, yourShop, round.getRoundNumber());
+        PlanningState opponentState = PlanningStateMapper.toPlanningState(
+                opponentPlan, PlanningShop.empty(), round.getRoundNumber());
 
-        // Viewer projection: load opponent plan for lock flag only — never pass board_state to the mapper.
         return GameMapper.toGameStateResponse(
                 game,
                 you.getSeat(),
+                you.getKeepHp(),
                 yourPlan.getGold(),
+                opponent.getKeepHp(),
+                countUnits(opponentState),
+                PlanningStateMapper.toBoardIdGrid(yourState.getBoard()),
+                PlanningStateMapper.toLaneDtos(yourState.getLane()),
+                PlanningStateMapper.toShopDtos(yourShop),
                 round.getPlanningDeadline(),
                 yourPlan.isLocked(),
-                opponentPlan.isLocked(),
-                shopService.toDtos(offers));
+                opponentPlan.isLocked());
+    }
+
+    private static int countUnits(PlanningState state) {
+        int count = state.boardUnitCount();
+        for (PlanningUnit unit : state.getLane()) {
+            if (unit != null) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static void mdcGame(UUID gameId) {

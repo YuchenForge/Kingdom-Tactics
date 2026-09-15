@@ -16,7 +16,6 @@ import com.kingdom.api.repository.GamePlayerRepository;
 import com.kingdom.api.repository.GameRepository;
 import com.kingdom.api.repository.RoundPlanRepository;
 import com.kingdom.api.repository.RoundRepository;
-import com.kingdom.api.repository.ShopOfferRepository;
 import com.kingdom.api.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,9 +60,6 @@ class GameServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private ShopOfferRepository shopOfferRepository;
-
-    @Mock
     private ShopService shopService;
 
     private GameService gameService;
@@ -81,7 +77,6 @@ class GameServiceTest {
                 roundRepository,
                 roundPlanRepository,
                 userRepository,
-                shopOfferRepository,
                 shopService);
     }
 

@@ -9,8 +9,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 
@@ -105,6 +107,70 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(error("GAME_NOT_READY", "Game is still waiting for players", HttpStatus.CONFLICT.value()));
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ApiError> missingHeader(MissingRequestHeaderException ex) {
+        String header = ex.getHeaderName();
+        log.info("Missing request header: {}", header);
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(error(
+                        "VALIDATION_ERROR",
+                        "Missing required header: " + header,
+                        HttpStatus.BAD_REQUEST.value()));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> typeMismatch(MethodArgumentTypeMismatchException ex) {
+        log.info("Invalid request parameter: {}", ex.getName());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(error(
+                        "VALIDATION_ERROR",
+                        "Invalid value for " + ex.getName(),
+                        HttpStatus.BAD_REQUEST.value()));
+    }
+
+    @ExceptionHandler(PlanningCommandException.class)
+    public ResponseEntity<ApiError> planningCommand(PlanningCommandException ex) {
+        int status = ex.httpStatus();
+        log.info("Planning command rejected: {} ({})", ex.errorCode(), status);
+        return ResponseEntity
+                .status(status)
+                .body(error(ex.errorCode(), ex.getMessage(), status));
+    }
+
+    @ExceptionHandler(RoundLockedException.class)
+    public ResponseEntity<ApiError> roundLocked(RoundLockedException ex) {
+        log.info("Round locked");
+        return ResponseEntity
+                .status(HttpStatus.LOCKED)
+                .body(error("LOCKED", "Round is locked, cannot modify", HttpStatus.LOCKED.value()));
+    }
+
+    @ExceptionHandler(WrongGameStateException.class)
+    public ResponseEntity<ApiError> wrongGameState(WrongGameStateException ex) {
+        log.info("Wrong game state: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(error("WRONG_GAME_STATE", ex.getMessage(), HttpStatus.CONFLICT.value()));
+    }
+
+    @ExceptionHandler(RoundNotFoundException.class)
+    public ResponseEntity<ApiError> roundNotFound(RoundNotFoundException ex) {
+        log.info("Round not found");
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(error("ROUND_NOT_FOUND", "Round not found", HttpStatus.NOT_FOUND.value()));
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiError> conflict(ConflictException ex) {
+        log.info("Conflict: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(error(ex.getCode(), ex.getMessage(), HttpStatus.CONFLICT.value()));
     }
 
     @ExceptionHandler(Exception.class)
