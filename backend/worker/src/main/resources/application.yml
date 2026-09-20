@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: kingdom-tactics-worker
+  profiles:
+    active: dev
+  main:
+    web-application-type: none
+
+app:
+  worker:
+    enabled: true
+    poll-ms: 10000
+
+logging:
+  level:
+    com.kingdom: DEBUG
+  pattern:
+    console: "%d{ISO8601} %-5level [%thread] %logger{36} - %msg%n"
+
+---
+# dev — same Postgres as API; Flyway disabled (API owns migrations)
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kingdom_tactics
+    username: kingdom_user
+    password: kingdom_password
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: false
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: false
+
+app:
+  worker:
+    enabled: false

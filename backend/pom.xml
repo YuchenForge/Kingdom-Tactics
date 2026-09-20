@@ -16,6 +16,7 @@
     <modules>
         <module>engine</module>
         <module>api</module>
+        <module>worker</module>
     </modules>
 
     <properties>
@@ -42,6 +43,11 @@
             <dependency>
                 <groupId>com.kingdom</groupId>
                 <artifactId>kingdom-tactics-engine</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.kingdom</groupId>
+                <artifactId>kingdom-tactics-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

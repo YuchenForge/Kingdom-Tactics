@@ -105,8 +105,18 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
                 <configuration>
                     <mainClass>com.kingdom.api.KingdomTacticsApplication</mainClass>
+                    <!-- Fat jar = *-boot.jar; thin jar stays the default Maven coordinate for worker. -->
+                    <classifier>boot</classifier>
                 </configuration>
             </plugin>
             <plugin>

@@ -7,8 +7,11 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -42,6 +45,16 @@ public class Round {
 
     @Column(name = "finished_at")
     private Instant finishedAt;
+
+    @Column(name = "advanced_at")
+    private Instant advancedAt;
+
+    @Column(length = 30)
+    private String outcome;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "keep_damage", columnDefinition = "jsonb")
+    private Map<String, Integer> keepDamage;
 
     protected Round() {
     }
@@ -122,5 +135,29 @@ public class Round {
 
     public void setFinishedAt(Instant finishedAt) {
         this.finishedAt = finishedAt;
+    }
+
+    public Instant getAdvancedAt() {
+        return advancedAt;
+    }
+
+    public void setAdvancedAt(Instant advancedAt) {
+        this.advancedAt = advancedAt;
+    }
+
+    public String getOutcome() {
+        return outcome;
+    }
+
+    public void setOutcome(String outcome) {
+        this.outcome = outcome;
+    }
+
+    public Map<String, Integer> getKeepDamage() {
+        return keepDamage;
+    }
+
+    public void setKeepDamage(Map<String, Integer> keepDamage) {
+        this.keepDamage = keepDamage;
     }
 }

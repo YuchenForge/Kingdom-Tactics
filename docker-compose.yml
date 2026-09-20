@@ -18,6 +18,25 @@ services:
     networks:
       - kingdom-network
 
+  # Start API first (or run Flyway once) so schema exists before worker ddl-auto: validate.
+  # Local without image: mvn -pl api spring-boot:run, then mvn -pl worker spring-boot:run
+  worker:
+    build:
+      context: ./backend
+      dockerfile: worker/Dockerfile
+    container_name: kingdom-tactics-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/kingdom_tactics
+      SPRING_DATASOURCE_USERNAME: kingdom_user
+      SPRING_DATASOURCE_PASSWORD: kingdom_password
+    restart: on-failure
+    networks:
+      - kingdom-network
+
 volumes:
   postgres_data:
 

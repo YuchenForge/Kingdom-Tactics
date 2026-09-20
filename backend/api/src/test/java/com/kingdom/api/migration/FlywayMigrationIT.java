@@ -17,7 +17,7 @@ class FlywayMigrationIT extends AbstractPostgresIT {
         Integer migrationCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = true",
                 Integer.class);
-        assertThat(migrationCount).isEqualTo(7);
+        assertThat(migrationCount).isEqualTo(11);
 
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("games")).isTrue();
@@ -26,6 +26,8 @@ class FlywayMigrationIT extends AbstractPostgresIT {
         assertThat(tableExists("round_plans")).isTrue();
         assertThat(tableExists("shop_offers")).isTrue();
         assertThat(tableExists("commands")).isTrue();
+        assertThat(tableExists("game_events")).isTrue();
+        assertThat(tableExists("game_state_snapshots")).isTrue();
     }
 
     @Test
@@ -56,6 +58,35 @@ class FlywayMigrationIT extends AbstractPostgresIT {
 
         assertThat(columnExists("game_players", "keep_hp")).isTrue();
         assertThat(columnExists("round_plans", "version")).isTrue();
+    }
+
+    @Test
+    void phase4CombatTablesHaveExpectedConstraintsAndColumns() {
+        assertThat(uniqueConstraintExists("game_events", "game_events_game_id_round_number_sequence_num_key")).isTrue();
+        assertThat(foreignKeyExists("game_events", "game_id", "games")).isTrue();
+
+        assertThat(columnExists("game_events", "sequence_num")).isTrue();
+        assertThat(columnExists("game_events", "event_type")).isTrue();
+        assertThat(columnExists("game_events", "data")).isTrue();
+        assertThat(columnExists("game_events", "tick")).isTrue();
+
+        assertThat(uniqueConstraintExists(
+                "game_state_snapshots",
+                "game_state_snapshots_game_id_round_number_is_round_start_pl_key")).isTrue();
+        assertThat(foreignKeyExists("game_state_snapshots", "game_id", "games")).isTrue();
+        assertThat(foreignKeyExists("game_state_snapshots", "player_id", "users")).isTrue();
+
+        assertThat(columnExists("game_state_snapshots", "is_round_start")).isTrue();
+        assertThat(columnExists("game_state_snapshots", "keep_hp")).isTrue();
+        assertThat(columnExists("game_state_snapshots", "board")).isTrue();
+        assertThat(columnExists("game_state_snapshots", "lane")).isTrue();
+        assertThat(columnExists("game_state_snapshots", "shop")).isTrue();
+
+        assertThat(columnExists("rounds", "advanced_at")).isTrue();
+        assertThat(indexExists("rounds", "idx_rounds_unadvanced")).isTrue();
+
+        assertThat(columnExists("rounds", "outcome")).isTrue();
+        assertThat(columnExists("rounds", "keep_damage")).isTrue();
     }
 
     private boolean tableExists(String tableName) {
@@ -122,5 +153,20 @@ class FlywayMigrationIT extends AbstractPostgresIT {
                 columnName,
                 referencedTable);
         return count != null && count >= 1;
+    }
+
+    private boolean indexExists(String tableName, String indexName) {
+        Integer count = jdbc.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM pg_indexes
+                WHERE schemaname = 'public'
+                  AND tablename = ?
+                  AND indexname = ?
+                """,
+                Integer.class,
+                tableName,
+                indexName);
+        return count != null && count == 1;
     }
 }

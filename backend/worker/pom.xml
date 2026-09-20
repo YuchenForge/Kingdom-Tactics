@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.kingdom</groupId>
+        <artifactId>kingdom-tactics</artifactId>
+        <version>0.1.0</version>
+    </parent>
+
+    <artifactId>kingdom-tactics-worker</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Kingdom Tactics Worker</name>
+    <description>Background round resolution worker (Approach A: depends on thin api jar)</description>
+
+    <dependencies>
+        <!-- Thin api jar: entities, repos, helpers. Do not scan com.kingdom.api as a Boot app. -->
+        <dependency>
+            <groupId>com.kingdom</groupId>
+            <artifactId>kingdom-tactics-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.kingdom</groupId>
+            <artifactId>kingdom-tactics-engine</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <mainClass>com.kingdom.worker.WorkerApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
