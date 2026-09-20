@@ -51,7 +51,7 @@ Kingdom Tactics is developed in 8 phases, each with a clear definition of "done.
 
 **Unit behaviors**:
 - Squire: basic melee (no special)
-- Shieldbearer: −1 armor (minimum 1 damage)
+- Shieldbearer: armor **1** (damage = max(1, ATK − armor))
 - Ranger: target lowest HP
 - Knight: target nearest enemy
 - Mage: every 3rd **attack** = splash damage to orthogonal neighbors
@@ -132,7 +132,6 @@ Output:
 
 **Docker Compose**:
 - PostgreSQL container
-- Redis container (placeholder for later phases)
 - API via local `spring-boot:run` (container optional)
 
 ### Tests
@@ -234,45 +233,50 @@ Two players can independently build legal boards through API calls. Planning pha
 
 **Status:** Planned (after Phase 3)
 
-**Goal:** Resolve rounds reliably and exactly once.
+**Goal:** Resolve rounds reliably and commit each round’s resolution effects once (no duplicate events / Keep damage).
 
 ### Build
 
-**Redis setup**:
-- Job queue for round resolutions
-- Rate limiting (later)
-- Caching (later)
+**Job transport:**
+- **DB polling** every ~10s — three candidate sets:
+  1. `LOCKED` (TX 1 claim)
+  2. `RESOLVING` (retry engine + TX 2; same `combat_seed`)
+  3. `ROUND_RESULT AND advanced_at IS NULL` (TX 3 only)
 
-**Worker application** (separate Spring Boot process):
-- Polls for locked rounds every 10 seconds
-- Acquires row-level lock (`SELECT ... FOR UPDATE`)
-- Calls combat engine
-- Persists events and snapshots
-- Transitions round state to ROUND_RESULT
-- Releases lock
+**Worker application** (separate Spring Boot / `backend/worker` module):
+- **TX 1 — Claim:** `SELECT … FOR UPDATE SKIP LOCKED` → game+round `RESOLVING` + persist `combat_seed` → **commit**
+- **Engine:** `CombatEngine.resolve` with **no** DB transaction held (may re-run after crash)
+- **TX 2 — Resolve:** row-lock / re-read; require still `RESOLVING`; events + end snapshots + Keep HP → durable `ROUND_RESULT` (serializes commit)
+- **TX 3 — Advance** (same job, new TX): `FINISHED` + ratings **or** next `PREPARATION` (gold +5, new shops); set `advanced_at`
 
-**State transitions**:
-- LOCKED → RESOLVING (worker picks up)
-- RESOLVING → ROUND_RESULT (resolution complete)
-- ROUND_RESULT → PREPARATION (if round < 8 and no winner)
-- ROUND_RESULT → FINISHED (if winner or round 8)
+**State transitions:**
+- `LOCKED → RESOLVING → ROUND_RESULT → PREPARATION` (round < 8, no Keep KO)
+- `LOCKED → RESOLVING → ROUND_RESULT → FINISHED` (Keep ≤ 0 after damage, or round 8 tie-break)
 
-**Persistence**:
-- Combat events (sequence-numbered, immutable once written)
-- Round-end snapshot (board, Keep damage, etc.)
-- Rules version (for future migrations)
+**Persistence:**
+- Combat events (immutable, **1-based** `sequence_num` per game+round)
+- Round-**end** snapshots only (survivors + Keep HP)
+- `rounds.outcome` + `rounds.keep_damage` (TX 2; historical `/rounds/{n}/result`)
+- `combat_seed` populated on claim (column already exists)
+- Keep HP on `game_players` (already from Phase 3); draw → `games.winner_id` NULL
+
+**API (api module, not worker):**
+- `GET /api/games/{id}/events?round=N&afterSequence=M`
+- `GET /api/games/{id}/rounds/{n}/result` (retrievable after advancement)
+- `GET /api/games/{id}/result` (FINISHED; null winner on draw)
+- `GET /state` exposes `RESOLVING` / `ROUND_RESULT` / `FINISHED` + `latestResolvedRound`
 
 ### Tests
 
-- Two workers cannot resolve the same round twice
-- Retry after failure does not duplicate events
-- Empty plan works (0 units on board → immediate loss)
-- Snapshot matches event log (replay validation)
-- Full 8-round match resolves correctly
+- Two workers cannot **commit** resolution effects twice for the same round (`SKIP LOCKED` + TX 2 state guard); engine recompute on `RESOLVING` is allowed
+- Crash after claim (`RESOLVING`) or after `ROUND_RESULT` recovers without duplicate events / Keep damage / advancement
+- Empty plan works (0 units → immediate loss / mutual wipe)
+- Replay validation (plans + seed → engine, same rules version)
+- Full 8-round match; round 2+ shops are fresh
 
 ### Definition of done
 
-A complete 8-round match can run via API with worker resolution. Full match is replayable from stored events.
+A complete 8-round match can run via API with worker resolution. `ROUND_RESULT` is a durable checkpoint. Full match is replayable from stored events + seed.
 
 ---
 
@@ -288,44 +292,42 @@ A complete 8-round match can run via API with worker resolution. Full match is r
 - `npm create vite@latest -- --template react-ts`
 - Configure Tailwind CSS
 - Setup TanStack Query for server-state management
-- Setup Zustand for local UI state
+- Local UI via React `useState` (selected/drag)
 
 **Core pages**:
-- Landing page (rules, login, demo replay)
+- Landing page (rules, login)
 - Auth page (register, login)
-- Lobby page (create game, join by invite)
+- Lobby page (create game, join by invite link)
 - Game board page (main game UI)
-- Result page (match outcome, rematch)
-- Replay page (step through events)
+- Result page (match outcome; play again via create/join)
 
 **Game board component**:
 - 4×4 CSS Grid placement board per player (local coordinates)
-- Shop display (3 unit cards)
+- Shop display (3 unit cards) with server display stats
 - 5-slot holding lane per player
-- 4×8 merged combat board for replay (P0 rotated 180°; global coordinates)
 - Gold and Keep HP counters
 - "Lock board" button
-- Action confirmation (buy, place, sell)
+- `yourBoard` IDs + `yourUnits` lookup
 
 **State polling**:
-- TanStack Query polling every 500ms during planning
-- TanStack Query polling every 500ms during combat
+- TanStack Query polling ~**1s** through PREPARATION / LOCKED / RESOLVING / ROUND_RESULT
+- “Resolving…” then static round/match result APIs
 - Automatic refetch on action completion
 
 **Loading/error states**:
 - Spinner during API requests
 - Error toast on failures
-- Reconnect logic
+- Reconnect / refetch on wrong-state
 
 ### Tests
 
 - Vitest + React Testing Library
-- Happy path: create game, place units, lock, watch combat
-- Error handling: cannot place unit without gold, cannot exceed unit cap
+- Happy path: create game, place units, lock, see static result
+- Error handling: buy without gold; relocate does not cost gold
 
 ### Definition of done
 
-Two people can play a complete 8-round match in separate browser sessions. Game is fully playable (no replay yet, just real-time results).
+Two people can play a complete 8-round match in separate browser sessions. Fully playable with static results (replay animation is Phase 6).
 
 ---
 
@@ -337,36 +339,29 @@ Two people can play a complete 8-round match in separate browser sessions. Game 
 
 ### Build
 
-**Event streaming**:
-- Endpoint: `GET /api/games/{gameId}/events?afterSequence=42`
-- Returns events since last fetch (polling-based, not WebSocket yet)
+**Event fetch** (Phase 4 APIs):
+- `GET /api/games/{gameId}/events?round=N&afterSequence=M&limit=…`
+- Page until `complete && !hasMore` after a resolved round is discovered
+- **No** separate `/replay` aggregation endpoint for MVP
 
-**Animation engine** (Zustand + Framer Motion):
-- Queue of animations (unit moved, unit attacked, unit died, Keep damaged)
-- Each animation: 200-400ms
-- Sequential playback
+**Animation** (Framer Motion + local state):
+- Order events by sequence → group by tick → animate tick → next tick (~250ms)
+- Get MOVE / ATTACK / DAMAGE / DEATH correct before any overlap scheduler
 
 **Combat replay controls**:
-- Play / Pause buttons
-- Step forward / backward (by event)
-- Playback speed (0.5×, 1×, 2×)
-- Jump to event
+- Play / Pause / 1× / 2× / Restart
+- Optional in-match overlay during next planning (dismissible; never blocks opponent)
 
 **Animations**:
-- Unit placement (grid → grid)
-- Unit movement (slide across board)
-- Attack lunge (unit leans forward, back)
-- Damage number (flying text, fade out)
-- Death (unit fades, removed from board)
-- Keep damage (counter updates with +X)
+- Unit placement, movement, attack, heal, death, Keep damage banner
 
 ### Tests
 
-- Playwright: create game, watch full combat replay, verify unit positions match server state
+- Playwright: watch full combat replay; positions match server end snapshot
 
 ### Definition of done
 
-A player can watch a completed round with smooth animations and replay it frame-by-frame. Final board state matches server snapshot.
+A player can watch a completed round with clear tick-sequential animations and basic controls. Final board matches server combat-end snapshot.
 
 ---
 
@@ -378,59 +373,38 @@ A player can watch a completed round with smooth animations and replay it frame-
 
 ### Build
 
-**Docker Compose** (local development):
-- Frontend container (Vite dev server)
-- API container (Spring Boot)
-- Worker container (Spring Boot worker)
-- PostgreSQL container
-- Redis container
-- All interconnected and ready to go
+**Docker Compose** (local full stack):
+- Frontend, API, worker, PostgreSQL
 
-**GitHub Actions CI/CD**:
-- Unit tests (backend + frontend)
-- Integration tests (Testcontainers)
-- Linting + type checking
+**GitHub Actions CI**:
+- Backend tests (`*Test` + `*IT`)
+- Frontend lint/typecheck/unit
+- Playwright replay gate
 - Build artifacts
-- E2E tests (Playwright)
 
 **Production deployment**:
-- Vercel: frontend (auto-deploy on push to main)
-- Render: API service + worker service + PostgreSQL + Redis
-- Automatic scaling (if applicable)
+- Vercel: frontend
+- Render: API + worker + PostgreSQL
+- Production env vars, CORS, HTTPS
 
-**Logging and observability**:
-- Structured logs (JSON, requestId, gameId, userId)
-- `/health` endpoint
-- `/ready` endpoint for load balancer
-- Request tracing (OpenTelemetry, optional)
+**Required observability**:
+- `/health` (or platform health) + DB-backed readiness for deploys
 
 **Documentation**:
-- README with screenshots/GIF
-- Architecture diagrams (rendered from this file)
-- Local setup guide
-- API docs (Swagger UI)
-- Deployment instructions
+- README with screenshots/GIF + live URL
+- Architecture diagram
+- Local setup + deployment notes
 
-**Demo**:
-- Seeded demo match (deterministic replay)
-- Public replay viewer (no login required)
+**Optional polish:** structured JSON logs, separate `/ready`, Swagger export, OpenTelemetry, dependency scanning, public no-login demo/replay (only if cheap)
+
+### Definition of done
+
+Someone can open the live URL, create an account, play (invite a friend), watch participant replay, clone + Docker Compose, and see green CI — without help from you. A public spectator/demo is optional.
 
 ### Tests
 
 - Playwright end-to-end happy path (create game, play 2 rounds, verify result)
 - Integration test with all services (docker-compose up, run test, docker-compose down)
-
-### Definition of done
-
-Someone can:
-1. Open a deployed URL (no local setup)
-2. Create an account
-3. Create a game and invite a friend
-4. Play the game
-5. Watch a replay
-6. Verify the architecture and code quality
-
-Without needing any help from you.
 
 ---
 
@@ -451,14 +425,6 @@ Pick **one** expansion. This demonstrates ability to extend a system without bre
 | **Admin dashboard** | Operational tooling, analytics, filters, exports, data inspection | Medium-High |
 | **Bot API** | Public API design, rate limits, API docs, simulation, external integrations | Medium |
 | **OAuth + email invites** | Third-party authentication, async email, invitation flows | Low-Medium |
-
-### Recommendation for SWE hiring
-
-**Admin dashboard** or **WebSockets** demonstrates the most value:
-- **Admin dashboard:** Shows you can build operational tooling, query complex data, and design effective UIs for non-players.
-- **WebSockets:** Shows you can handle real-time state delivery, connection management, and complex concurrency.
-
-Both extend the core system without breaking it and add substantial complexity.
 
 ---
 

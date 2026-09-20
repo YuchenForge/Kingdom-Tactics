@@ -39,8 +39,8 @@ This project is designed to showcase transactional backends, deterministic domai
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | React, TypeScript, Vite, Tailwind CSS, TanStack Query, Zustand |
-| Backend | Java 21, Spring Boot 3, PostgreSQL, Redis |
+| Frontend | React, TypeScript, Vite, Tailwind CSS, TanStack Query |
+| Backend | Java 21, Spring Boot 3, PostgreSQL |
 | Testing | JUnit 5, Testcontainers, Vitest, Playwright |
 | Deployment | Docker, GitHub Actions, Render/Railway |
 
@@ -53,50 +53,20 @@ This project is designed to showcase transactional backends, deterministic domai
 - Java 21
 - Node.js 18+
 - Docker & Docker Compose
-- PostgreSQL 15+
-- Redis 7+
+- PostgreSQL 15+ (via Compose)
 
 ### Local development
 
-```bash
-# Clone the repo
-git clone https://github.com/your-username/kingdom-tactics.git
-cd kingdom-tactics
-
-# Copy environment file
-cp .env.example .env
-
-# Start services (Docker)
-docker-compose up -d
-
-# Backend setup
-cd backend
-./mvnw clean install
-./mvnw spring-boot:run
-
-# Frontend setup (new terminal)
-cd frontend
-npm install
-npm run dev
-```
-
-The game will be available at `http://localhost:5173`.
-
-### Running tests
+See **[`docs/local-setup.md`](docs/local-setup.md)** for the current commands. Summary:
 
 ```bash
-# Backend unit tests
-cd backend && ./mvnw test
-
-# Backend integration tests (requires Docker)
-cd backend && ./mvnw verify
-
-# Frontend unit tests
-cd frontend && npm run test
-
-# E2E tests
-cd frontend && npm run test:e2e
+git clone <repo-url> && cd kingdomTactics
+docker compose up -d          # Postgres
+cd backend && mvn -pl api -am test          # *Test + *IT (Docker for ITs)
+mvn -pl api -am spring-boot:run             # API on :8080
 ```
+
+Frontend / worker / Compose full stack arrive in Phases 5–7.
 
 ---
 
@@ -107,8 +77,8 @@ cd frontend && npm run test:e2e
 | **0** | Design & specification | ✅ Complete |
 | **1** | Pure combat engine | ✅ Complete |
 | **2** | Backend foundation | ✅ Complete |
-| **3** | Planning & commands | 📝 Next |
-| **4** | Worker & resolution | ⏳ Planned |
+| **3** | Planning & commands | ✅ Complete |
+| **4** | Worker & resolution | 📝 Next |
 | **5** | Frontend MVP | ⏳ Planned |
 | **6** | Replay & animation | ⏳ Planned |
 | **7** | Deploy & polish | ⏳ Planned |
@@ -124,25 +94,22 @@ See [ROADMAP.md](ROADMAP.md) for details on each phase.
 React + TypeScript client
   ├─ Tailwind CSS + CSS Grid
   ├─ TanStack Query: server-state fetching
-  ├─ Zustand: local UI state
-  └─ Framer Motion: animations
+  ├─ React useState: local selection/drag
+  └─ Framer Motion: Phase 6 replay
             │
             ▼
 Java / Spring Boot API
   ├─ REST command endpoints
   ├─ Authentication & authorization
-  ├─ Game query endpoints
-  └─ WebSocket/SSE (later phases)
+  └─ Game query endpoints
             │
-     ┌──────┼───────────────────────┐
-     ▼      ▼                       ▼
-PostgreSQL  Redis                 Worker
-  │          │                      │
-  │          ├─ job queue           ├─ round resolution
-  │          ├─ rate limiting       ├─ combat engine
-  │          └─ caching             └─ event persistence
-  ▼
-Flyway migrations
+     ┌──────┴───────────────────────┐
+     ▼                              ▼
+PostgreSQL                        Worker
+  │                                 │
+  ├─ users, games, rounds           ├─ Claim LOCKED (SKIP LOCKED)
+  ├─ commands, events, snapshots    ├─ Combat engine
+  └─ ratings (±25 Phase 4)          └─ Persist + advance
 ```
 
 See [docs/architecture.md](docs/architecture.md) for detailed diagrams.
@@ -194,33 +161,20 @@ See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines on commits, PRs, c
 
 ## Debugging
 
-### Replay a match
+### Replay a match (planned — Phase 4+)
 
-All matches are stored with full event logs. To debug a specific match:
+After Phase 4 persists events, participants can page `GET /api/games/{gameId}/events`. Visual replay is Phase 6.
 
-```bash
-curl http://localhost:8080/api/games/{gameId}/replay
-```
-
-This returns the complete round-by-round event log. Use it to:
-- Verify combat outcomes
-- Reproduce bugs
-- Validate rule changes
-
-### View game state
+### View game state (available now)
 
 ```bash
-curl http://localhost:8080/api/games/{gameId}/state
+curl http://localhost:8080/api/games/{gameId}/state \
+  -H "Authorization: Bearer <token>"
 ```
 
-Returns current board, Keep HP, gold, units, and planning phase details.
+### Health checks
 
-### Check backend health
-
-```bash
-curl http://localhost:8080/health
-curl http://localhost:8080/health/games
-```
+Planned in Phase 7 (`/health`). Today, verify the API with auth/`/api/me` as in `docs/local-setup.md`.
 
 ---
 
@@ -252,4 +206,4 @@ For questions or issues, open a GitHub issue or discussion.
 
 ---
 
-**Next step:** Start [Phase 1 — Pure Deterministic Combat Engine](ROADMAP.md#phase-1).
+**Next step:** [Phase 4 — Worker and round resolution](ROADMAP.md#phase-4-worker-and-round-resolution).

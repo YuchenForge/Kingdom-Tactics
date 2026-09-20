@@ -18,19 +18,6 @@ services:
     networks:
       - kingdom-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: kingdom-tactics-redis
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - kingdom-network
-
 volumes:
   postgres_data:
 
