@@ -1,0 +1,24 @@
+/* Kingdom Tactics visual tokens. No game rules or application state. */
+:root {
+  color-scheme: dark;
+  --kt-bg: #182129; --kt-surface: #25323c; --kt-surface-raised: #31414d;
+  --kt-stone: #46545e; --kt-border: #667b88; --kt-ink: #17232d;
+  --kt-text: #e7edf0; --kt-muted: #adbcc5;
+  --kt-friendly: #58c4d8; --kt-opponent: #f59e0b;
+  --kt-gold: #f5df87; --kt-positive: #89cfab; --kt-danger: #f19ea7;
+  --kt-focus: #e7edf0; --kt-selected: #58c4d8;
+  --kt-font-ui: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --kt-font-brand: var(--kt-font-ui);
+  --kt-space-1: 4px; --kt-space-2: 8px; --kt-space-3: 12px;
+  --kt-space-4: 16px; --kt-space-6: 24px; --kt-space-8: 32px;
+  --kt-radius-sm: 4px; --kt-radius-md: 8px; --kt-radius-lg: 12px;
+  --kt-shadow-panel: 0 8px 24px #080f1640;
+  --kt-shadow-unit: 0 2px 3px #080f1660;
+  --kt-outline: 2px; --kt-icon-size: 24px; --kt-unit-board: 48px;
+  --kt-unit-shop: 64px; --kt-unit-detail: 128px;
+  --kt-duration-feedback: 140ms; --kt-duration-placement: 180ms;
+  --kt-ease: cubic-bezier(.2,.7,.2,1);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --kt-duration-feedback: 0ms; --kt-duration-placement: 0ms; }
+}

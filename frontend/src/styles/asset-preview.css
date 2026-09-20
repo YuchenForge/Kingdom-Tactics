@@ -1,0 +1,82 @@
+/* Standalone art review only. Import tokens.css first. Not a React app. */
+*{box-sizing:border-box}body{margin:0;background:var(--kt-bg);color:var(--kt-text);font:15px/1.5 var(--kt-font-ui)}main{max-width:1180px;margin:auto;padding:32px}h1,h2,h3,p{margin:0 0 12px}h1{font-size:30px;letter-spacing:.02em}h2{font-size:20px}h3{font-size:16px}section{margin:32px 0}.muted,small{color:var(--kt-muted)}.brand,.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.brand img{width:56px}.panel{background:var(--kt-surface);border:1px solid var(--kt-border);border-radius:8px;padding:20px;box-shadow:var(--kt-shadow-panel)}.layout{display:grid;grid-template-columns:minmax(280px,1.2fr) minmax(260px,1fr);gap:24px}.board{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;max-width:430px;margin:16px 0}.tile{position:relative;aspect-ratio:1;background:var(--kt-surface-raised);border:1px solid var(--kt-border);border-radius:4px;display:grid;place-items:center;min-width:0}.tile img{width:70%;max-width:64px}.tile:hover,.tile[data-state=hover]{background:var(--kt-stone)}.tile[data-state=selected]{outline:3px solid var(--kt-selected);outline-offset:-3px}.tile[data-state=valid]{border:2px dashed var(--kt-positive)}.tile[data-state=invalid]{border:2px dashed var(--kt-danger);background:repeating-linear-gradient(135deg,transparent 0 8px,#f19ea719 8px 11px)}.tile[data-state=friendly]{border-bottom:4px solid var(--kt-friendly)}.tile[data-state=enemy]{border-left:4px double var(--kt-opponent)}.tile[data-state=locked]{opacity:.65}.level{color:var(--kt-gold);font-size:12px;letter-spacing:2px}.tile .level{position:absolute;bottom:2px;right:5px}.lane{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.lane .tile{border-style:dashed}.lane .tile.occupied{border-style:solid}.shop{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.card{position:relative;min-width:0;padding:12px 4px;text-align:center;background:var(--kt-bg);border:1px solid var(--kt-border);border-radius:8px}.card img{width:64px}.card.selected{outline:2px solid var(--kt-selected)}.card.blocked{border-style:dashed}.card.sold{display:grid;place-content:center;min-height:170px;color:var(--kt-muted)}.badge{display:inline-flex;gap:5px;align-items:center;color:var(--kt-gold);padding:2px 8px;border:1px solid var(--kt-border);border-radius:4px}.button{font:inherit;color:var(--kt-text);background:var(--kt-surface-raised);border:1px solid var(--kt-border);border-radius:4px;padding:9px 14px;min-height:44px}.button:disabled{color:var(--kt-muted);border-style:dashed}.button:focus-visible,.tile:focus-visible{outline:3px solid var(--kt-focus);outline-offset:3px}.roster{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.unit-sizes{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}.swatches,.icons,.states{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}.swatch{height:40px;border-radius:4px;border:1px solid var(--kt-border)}.icon{display:inline-block;width:24px;height:24px;flex-shrink:0;vertical-align:middle;overflow:visible}.states .tile{height:84px;aspect-ratio:auto}.keep{width:96px}.note{border-left:3px solid var(--kt-friendly);padding-left:14px}.spacer{justify-content:space-between}footer{margin:32px 0;color:var(--kt-muted)}@media(max-width:760px){main{padding:16px}.layout{grid-template-columns:1fr}.roster{grid-template-columns:1fr}.shop{gap:5px}.card{font-size:13px}.card h3{font-size:13px}}
+
+/* Preview icons are inline SVGs: currentColor works without external mask requests. */
+
+
+/* Three gameplay mockups share the same outer viewport. */
+.game-mock{width:100%;max-width:none;height:min(680px,calc(100svh - 32px));min-height:300px;display:grid;grid-template-rows:40px minmax(0,1fr) 68px;gap:12px;padding:16px;scroll-margin-top:16px}
+.game-header{display:flex;align-items:center;gap:16px;min-width:0;flex-wrap:wrap}
+.game-header h2{margin:0;margin-right:auto;font-size:18px}
+.game-header .icon{width:18px;height:18px}
+.game-timer{white-space:nowrap;color:var(--kt-muted);font-variant-numeric:tabular-nums}
+.game-body{display:grid;grid-template-columns:80px minmax(0,1fr) 80px;gap:12px;min-height:0;align-items:stretch}
+.recruit-mock .game-body{grid-template-columns:80px minmax(0,1fr) 80px 220px}
+.game-keep{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;text-align:center;font-size:12px;min-width:0}
+.game-keep img{width:64px;max-width:100%;height:auto}
+.friendly-keep{border-left:3px solid var(--kt-friendly)}
+.opponent-keep{border-right:3px double var(--kt-opponent)}
+.board-area{container-type:size;min-width:0;min-height:0;display:grid;place-items:center;position:relative}
+.deployment{position:absolute;top:0;left:0;font-size:12px;color:var(--kt-muted)}
+.fitted-board{display:grid;gap:4px;width:max-content;height:max-content;position:relative}
+.planning-grid{--cell:min(calc((100cqw - 12px)/4),calc((100cqh - 36px)/4));grid-template-columns:repeat(4,var(--cell));grid-template-rows:repeat(4,var(--cell));margin-top:24px}
+.combat-grid{--cell:min(calc((100cqw - 28px)/8),calc((100cqh - 12px)/4));grid-template-columns:repeat(8,var(--cell));grid-template-rows:repeat(4,var(--cell))}
+.combat-grid::after{content:"";position:absolute;left:50%;height:100%;border-left:1px dashed var(--kt-border);pointer-events:none}
+.fitted-board .tile{width:var(--cell);height:var(--cell);min-height:0;overflow:hidden}
+.fitted-board .tile img{width:74%;height:auto;max-width:none;max-height:85%}
+.tile .level{background:var(--kt-ink);border-radius:3px;padding:1px 3px;letter-spacing:0;white-space:nowrap;line-height:1}
+.fitted-board .tile .level{font-size:clamp(7px,calc(var(--cell)*.16),14px);right:2px;bottom:2px}
+.game-footer{margin:0;color:var(--kt-text);display:flex;align-items:center;justify-content:center;gap:16px;min-width:0}
+.game-footer .lane{width:clamp(180px,40%,340px);height:60px;gap:5px}
+.game-footer .lane .tile{aspect-ratio:auto;min-height:0;overflow:hidden}
+.game-footer .lane img{height:85%;width:auto;max-width:90%}
+.lane-label{font-size:12px;white-space:nowrap;color:var(--kt-muted)}
+.game-footer .button{white-space:nowrap}
+.game-footer .icon{width:18px;height:18px}
+.combat-footer{justify-content:space-between;font-size:12px}
+.recruit-panel{display:flex;flex-direction:column;justify-content:center;gap:10px;padding-left:12px;border-left:1px solid var(--kt-border);min-width:0}
+.recruit-panel h3{margin:0}.recruit-panel .row{font-size:12px}
+.recruit-offer{display:flex;align-items:center;gap:8px;background:var(--kt-bg);border:1px solid var(--kt-border);border-radius:6px;padding:8px;font-size:12px}
+.recruit-offer img{width:48px;height:48px}.recruit-offer .level{display:block}
+.recruit-offer .badge{margin-left:auto;padding:2px 4px}.recruit-offer .icon{width:14px;height:14px}
+.recruit-panel .button{font-size:12px;padding:8px}.recruit-panel .button .icon{width:16px;height:16px}
+@media(max-width:760px){
+ .game-mock{padding:10px;grid-template-rows:56px minmax(0,1fr) 60px;gap:8px}
+ .game-header{gap:6px;font-size:11px}.game-header h2{font-size:14px;flex-basis:100%}
+ .game-body{grid-template-columns:48px minmax(0,1fr) 48px;gap:5px}
+ .game-keep{font-size:10px}.game-keep img{width:40px}
+ .recruit-mock .game-body{grid-template-columns:48px minmax(0,1fr) 48px;grid-template-rows:minmax(0,1fr) 110px}
+ .recruit-panel{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px 0 0;border-left:0;border-top:1px solid var(--kt-border)}
+ .recruit-panel>.row{display:none}.recruit-offer{padding:3px;gap:3px;flex-wrap:wrap;justify-content:center;font-size:10px}
+ .recruit-offer img{width:30px;height:30px}.recruit-offer .badge{margin:0}.recruit-panel>.button{grid-column:1/-1;min-height:26px;padding:2px}
+ .game-footer{gap:6px}.game-footer .lane{width:auto;flex:1;min-width:0;height:44px}.game-footer .lane .muted{font-size:8px}
+ .lane-label{font-size:10px}.game-footer .button{font-size:10px;padding:4px}.game-footer .button .icon{display:none}
+ .combat-footer{font-size:10px}.combat-footer .muted{max-width:45%;text-align:center}
+}
+
+/* Put the planning Keeps halfway between the fitted board and frame edges. */
+.formation-mock .game-body,.recruit-mock .game-body{position:relative}
+.formation-mock .game-body{grid-template-columns:minmax(0,1fr)}
+.recruit-mock .game-body{grid-template-columns:minmax(0,1fr) 220px}
+.formation-mock .board-area,.recruit-mock .board-area{grid-column:1;grid-row:1;margin-inline:80px}
+.formation-mock .game-keep,.recruit-mock .game-keep{position:absolute;top:50%;transform:translate(-50%,-50%);width:76px;border:0;z-index:1}
+.formation-mock .game-body{--field-width:100%;--board-side:min(calc(100cqw - 160px),calc(100cqh - 24px));container-type:size}
+.recruit-mock .game-body{--field-width:calc(100% - 232px);--board-side:min(calc(100cqw - 392px),calc(100cqh - 24px));container-type:size}
+.formation-mock .friendly-keep,.recruit-mock .friendly-keep{left:calc((var(--field-width) - var(--board-side))/4)}
+.formation-mock .opponent-keep,.recruit-mock .opponent-keep{left:calc(var(--field-width) - (var(--field-width) - var(--board-side))/4)}
+.recruit-mock .recruit-panel{grid-column:2;grid-row:1;position:relative;padding-top:30px}
+.shop-close{position:absolute;right:0;top:0;width:28px;height:28px;padding:0;border:1px solid var(--kt-border);border-radius:4px;color:var(--kt-text);background:var(--kt-bg);font:22px/1 var(--kt-font-ui)}
+/* A raised central seam with contrasting edges, not a dotted grid line. */
+.combat-grid{column-gap:6px;--cell:min(calc((100cqw - 42px)/8),calc((100cqh - 12px)/4))}
+.combat-grid::after{left:50%;top:-5px;bottom:-5px;height:auto;width:6px;transform:translateX(-50%);border-left:2px solid var(--kt-friendly);border-right:2px solid var(--kt-opponent);background:var(--kt-ink);box-shadow:0 0 0 2px var(--kt-bg);border-radius:3px}
+.combat-grid::before{content:"";position:absolute;z-index:2;left:50%;top:50%;width:12px;height:12px;transform:translate(-50%,-50%) rotate(45deg);background:var(--kt-surface);border:2px solid var(--kt-text);box-shadow:0 0 0 2px var(--kt-bg);pointer-events:none}
+@media(max-width:760px){
+ .formation-mock .board-area,.recruit-mock .board-area{margin-inline:48px}
+ .formation-mock .game-body{--board-side:min(calc(100cqw - 96px),calc(100cqh - 24px))}
+ .recruit-mock .game-body{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) 120px;--field-width:100%;--board-side:min(calc(100cqw - 96px),calc(100cqh - 152px))}
+ .formation-mock .game-keep,.recruit-mock .game-keep{width:44px;font-size:9px}
+ .recruit-mock .game-keep{top:calc((100% - 128px)/2)}
+ .recruit-mock .recruit-panel{grid-column:1;grid-row:2;padding-top:26px}
+ .recruit-offer img{width:24px;height:24px}
+ .shop-close{width:24px;height:24px;font-size:18px}
+}
