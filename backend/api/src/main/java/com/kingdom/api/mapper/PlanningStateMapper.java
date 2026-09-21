@@ -131,7 +131,8 @@ public final class PlanningStateMapper {
 
     // --- board: sparse "x,y" → unit map (empty join = {}) ---
 
-    static PlanningUnit[][] parseBoard(Map<String, Object> boardState) {
+    /** Sparse "x,y" -> {id,type,level} -> 4×4 local board (empty join = {}). */
+    public static PlanningUnit[][] parseBoard(Map<String, Object> boardState) {
         PlanningUnit[][] board = new PlanningUnit[Board.WIDTH][Board.HEIGHT];
         if (boardState == null || boardState.isEmpty()) {
             return board;

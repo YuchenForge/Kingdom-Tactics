@@ -35,15 +35,18 @@ public class CombatEvent {
     public Map<String, Object> getData() { return new HashMap<>(data); }
 
     /**
-     * Factory method for UNIT_PLACED event.
+     * Factory method for UNIT_PLACED event (global combat coords; includes level/HP for playback).
      */
-    public static CombatEvent unitPlaced(int tick, String unitId, String unitType, int x, int y, int playerId) {
+    public static CombatEvent unitPlaced(int tick, UnitInstance unit) {
         Map<String, Object> data = new HashMap<>();
-        data.put("unitId", unitId);
-        data.put("unitType", unitType);
-        data.put("x", x);
-        data.put("y", y);
-        data.put("playerId", playerId);
+        data.put("unitId", unit.getId());
+        data.put("unitType", unit.getType());
+        data.put("x", unit.getX());
+        data.put("y", unit.getY());
+        data.put("playerId", unit.getPlayerId());
+        data.put("level", unit.getLevel());
+        data.put("currentHp", unit.getCurrentHp());
+        data.put("maxHp", unit.getMaxHp());
         return new CombatEvent(EventType.UNIT_PLACED, tick, data);
     }
 

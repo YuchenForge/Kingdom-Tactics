@@ -76,6 +76,47 @@ class CombatEngineTest {
     }
 
     @Test
+    void unit_placed_events_include_level_and_hp_at_global_coords() {
+        Board playerBoard = new Board(0);
+        Board enemyBoard = new Board(1);
+
+        // P0 local (2,0) → combat (1,3); P1 local (1,2) → combat (1,6)
+        playerBoard.addUnit(new UnitInstance("unit_001", UnitDefinition.mage(), 2, 0, 2));
+        enemyBoard.addUnit(new UnitInstance("unit_002", UnitDefinition.squire(), 1, 2, 1));
+
+        ResolutionResult result = new CombatEngine(1L).resolve(playerBoard, enemyBoard);
+
+        List<CombatEvent> placed = result.getEvents().stream()
+            .filter(e -> e.getType() == CombatEvent.EventType.UNIT_PLACED)
+            .collect(Collectors.toList());
+        assertThat(placed).hasSize(2);
+
+        CombatEvent magePlaced = placed.stream()
+            .filter(e -> "unit_001".equals(e.getData().get("unitId")))
+            .findFirst()
+            .orElseThrow();
+        assertThat(magePlaced.getData()).containsEntry("unitType", "Mage")
+            .containsEntry("x", 1)
+            .containsEntry("y", 3)
+            .containsEntry("playerId", 0)
+            .containsEntry("level", 2)
+            .containsEntry("currentHp", 16)
+            .containsEntry("maxHp", 16);
+
+        CombatEvent squirePlaced = placed.stream()
+            .filter(e -> "unit_002".equals(e.getData().get("unitId")))
+            .findFirst()
+            .orElseThrow();
+        assertThat(squirePlaced.getData()).containsEntry("unitType", "Squire")
+            .containsEntry("x", 1)
+            .containsEntry("y", 6)
+            .containsEntry("playerId", 1)
+            .containsEntry("level", 1)
+            .containsEntry("currentHp", 8)
+            .containsEntry("maxHp", 8);
+    }
+
+    @Test
     void scenario_2_knight_vs_shieldbearer() {
         Board playerBoard = new Board(0);
         Board enemyBoard = new Board(1);

@@ -44,4 +44,16 @@ public interface RoundRepository extends JpaRepository<Round, UUID> {
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
     Optional<Round> lockLockedRoundForClaim(@Param("id") UUID id);
+
+    /**
+     * TX2 commit: lock this round if still RESOLVING.
+     * Plain FOR UPDATE (not SKIP LOCKED) — wait if another worker holds the row;
+     * after they commit, re-check fails RESOLVING → no-op.
+     */
+    @Query(value = """
+            SELECT * FROM rounds
+            WHERE id = :id AND state = 'RESOLVING'
+            FOR UPDATE
+            """, nativeQuery = true)
+    Optional<Round> lockResolvingRoundForCommit(@Param("id") UUID id);
 }

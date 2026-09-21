@@ -38,8 +38,7 @@ public class CombatEngine {
 
         int tick = 0;
         for (UnitInstance unit : combatBoard.getAliveUnits()) {
-            events.add(CombatEvent.unitPlaced(
-                tick, unit.getId(), unit.getType(), unit.getX(), unit.getY(), unit.getPlayerId()));
+            events.add(CombatEvent.unitPlaced(tick, unit));
         }
 
         boolean combatEnded = false;
