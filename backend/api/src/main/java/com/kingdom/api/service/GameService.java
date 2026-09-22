@@ -45,7 +45,7 @@ public class GameService {
     private static final Logger log = LoggerFactory.getLogger(GameService.class);
 
     static final int STARTING_GOLD = 10;
-    static final int PLANNING_SECONDS = 45;
+    public static final int PLANNING_SECONDS = 45;
 
     private final GameRepository gameRepository;
     private final GamePlayerRepository gamePlayerRepository;

@@ -8,6 +8,7 @@ import com.kingdom.engine.domain.CombatBoard;
 import com.kingdom.engine.domain.ResolutionResult;
 import com.kingdom.worker.service.ClaimService;
 import com.kingdom.worker.service.ClaimedRound;
+import com.kingdom.worker.service.MatchAdvancementService;
 import com.kingdom.worker.service.ResolutionService;
 import com.kingdom.worker.service.ResolveService;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,13 +43,16 @@ class RoundResolutionJobTest {
     @Mock
     private ResolveService resolveService;
     @Mock
+    private MatchAdvancementService advancementService;
+    @Mock
     private RoundRepository roundRepository;
 
     private RoundResolutionJob job;
 
     @BeforeEach
     void setUp() {
-        job = new RoundResolutionJob(claimService, resolutionService, resolveService, roundRepository);
+        job = new RoundResolutionJob(
+                claimService, resolutionService, resolveService, advancementService, roundRepository);
     }
 
     @Test
@@ -59,12 +63,12 @@ class RoundResolutionJobTest {
         job.processLocked(roundId);
 
         verify(claimService).claim(roundId);
-        verifyNoInteractions(resolutionService, resolveService, roundRepository);
+        verifyNoInteractions(resolutionService, resolveService, advancementService, roundRepository);
         verifyNoMoreInteractions(claimService);
     }
 
     @Test
-    void processLocked_claimsThenResolvesThenCommits() {
+    void processLocked_claimsThenResolvesThenCommitsThenAdvances() {
         UUID roundId = UUID.randomUUID();
         UUID gameId = UUID.randomUUID();
         long seed = 99L;
@@ -73,19 +77,21 @@ class RoundResolutionJobTest {
         when(claimService.claim(roundId)).thenReturn(Optional.of(claimed));
         when(resolutionService.resolve(roundId, gameId, seed)).thenReturn(result);
         when(resolveService.commit(roundId, gameId, 1, result)).thenReturn(true);
+        when(advancementService.advance(roundId)).thenReturn(true);
 
         job.processLocked(roundId);
 
-        InOrder order = inOrder(claimService, resolutionService, resolveService);
+        InOrder order = inOrder(claimService, resolutionService, resolveService, advancementService);
         order.verify(claimService).claim(roundId);
         order.verify(resolutionService).resolve(roundId, gameId, seed);
         order.verify(resolveService).commit(roundId, gameId, 1, result);
+        order.verify(advancementService).advance(roundId);
         verifyNoInteractions(roundRepository);
-        verifyNoMoreInteractions(claimService, resolutionService, resolveService);
+        verifyNoMoreInteractions(claimService, resolutionService, resolveService, advancementService);
     }
 
     @Test
-    void processLocked_whenEngineFails_doesNotCommit() {
+    void processLocked_whenEngineFails_doesNotCommitOrAdvance() {
         UUID roundId = UUID.randomUUID();
         UUID gameId = UUID.randomUUID();
         long seed = 7L;
@@ -97,12 +103,29 @@ class RoundResolutionJobTest {
         job.processLocked(roundId);
 
         verify(resolutionService).resolve(roundId, gameId, seed);
-        verifyNoInteractions(resolveService);
+        verifyNoInteractions(resolveService, advancementService);
         verifyNoMoreInteractions(claimService, resolutionService);
     }
 
     @Test
-    void retryResolving_usesExistingSeedWithoutClaimThenCommits() {
+    void processLocked_whenTx2NoOps_doesNotAdvance() {
+        UUID roundId = UUID.randomUUID();
+        UUID gameId = UUID.randomUUID();
+        long seed = 3L;
+        ResolutionResult result = stubResult();
+        when(claimService.claim(roundId))
+                .thenReturn(Optional.of(new ClaimedRound(roundId, gameId, 1, seed)));
+        when(resolutionService.resolve(roundId, gameId, seed)).thenReturn(result);
+        when(resolveService.commit(roundId, gameId, 1, result)).thenReturn(false);
+
+        job.processLocked(roundId);
+
+        verify(resolveService).commit(roundId, gameId, 1, result);
+        verifyNoInteractions(advancementService);
+    }
+
+    @Test
+    void retryResolving_usesExistingSeedWithoutClaimThenCommitsThenAdvances() {
         UUID roundId = UUID.randomUUID();
         UUID gameId = UUID.randomUUID();
         long seed = 42L;
@@ -111,11 +134,14 @@ class RoundResolutionJobTest {
         when(roundRepository.findById(roundId)).thenReturn(Optional.of(round));
         when(resolutionService.resolve(roundId, gameId, seed)).thenReturn(result);
         when(resolveService.commit(eq(roundId), eq(gameId), eq(2), eq(result))).thenReturn(true);
+        when(advancementService.advance(roundId)).thenReturn(true);
 
         job.retryResolving(roundId);
 
-        verify(resolutionService).resolve(roundId, gameId, seed);
-        verify(resolveService).commit(roundId, gameId, 2, result);
+        InOrder order = inOrder(resolutionService, resolveService, advancementService);
+        order.verify(resolutionService).resolve(roundId, gameId, seed);
+        order.verify(resolveService).commit(roundId, gameId, 2, result);
+        order.verify(advancementService).advance(roundId);
         verifyNoInteractions(claimService);
         verify(roundRepository, never()).save(any());
     }
@@ -129,7 +155,7 @@ class RoundResolutionJobTest {
 
         job.retryResolving(roundId);
 
-        verifyNoInteractions(claimService, resolutionService, resolveService);
+        verifyNoInteractions(claimService, resolutionService, resolveService, advancementService);
     }
 
     @Test
@@ -140,7 +166,18 @@ class RoundResolutionJobTest {
 
         job.retryResolving(roundId);
 
-        verifyNoInteractions(claimService, resolutionService, resolveService);
+        verifyNoInteractions(claimService, resolutionService, resolveService, advancementService);
+    }
+
+    @Test
+    void advanceOnly_delegatesToAdvancementService() {
+        UUID roundId = UUID.randomUUID();
+        when(advancementService.advance(roundId)).thenReturn(true);
+
+        job.advanceOnly(roundId);
+
+        verify(advancementService).advance(roundId);
+        verifyNoInteractions(claimService, resolutionService, resolveService, roundRepository);
     }
 
     private static Round resolvingRound(UUID roundId, UUID gameId, int roundNumber, Long seed) {

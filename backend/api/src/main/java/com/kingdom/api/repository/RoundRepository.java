@@ -56,4 +56,18 @@ public interface RoundRepository extends JpaRepository<Round, UUID> {
             FOR UPDATE
             """, nativeQuery = true)
     Optional<Round> lockResolvingRoundForCommit(@Param("id") UUID id);
+
+    /**
+     * TX3 advance: lock this round if still ROUND_RESULT and not yet advanced.
+     * Plain FOR UPDATE (not SKIP LOCKED) — wait if another worker holds the row;
+     * after they set advanced_at, re-check fails → no-op.
+     */
+    @Query(value = """
+            SELECT * FROM rounds
+            WHERE id = :id
+              AND state = 'ROUND_RESULT'
+              AND advanced_at IS NULL
+            FOR UPDATE
+            """, nativeQuery = true)
+    Optional<Round> lockUnadvancedRoundResult(@Param("id") UUID id);
 }

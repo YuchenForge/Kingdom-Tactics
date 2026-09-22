@@ -43,7 +43,7 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void processLocked_claimEngineCommit_leavesRoundResultForPath3() {
+    void processLocked_claimEngineCommitAdvance_continuesToPreparation() {
         Fixture fixture = seedLockedRoundWithValidPlans();
         Map<String, Object> board0Before = copyBoard(fixture.roundId(), fixture.player0Id());
         Map<String, Object> board1Before = copyBoard(fixture.roundId(), fixture.player1Id());
@@ -53,13 +53,32 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
         Round round = roundRepository.findById(fixture.roundId()).orElseThrow();
         Game game = gameRepository.findById(fixture.gameId()).orElseThrow();
 
+        // Completed round stays ROUND_RESULT forever; TX3 advances the game
         assertThat(round.getState()).isEqualTo(GameStates.ROUND_RESULT);
-        assertThat(game.getState()).isEqualTo(GameStates.ROUND_RESULT);
         assertThat(round.getCombatSeed()).isNotNull();
         assertThat(round.getOutcome()).isNotNull();
         assertThat(round.getKeepDamage()).isNotNull().containsKeys("0", "1");
         assertThat(round.getFinishedAt()).isNotNull();
-        assertThat(round.getAdvancedAt()).isNull();
+        assertThat(round.getAdvancedAt()).isNotNull();
+
+        assertThat(game.getState()).isEqualTo(GameStates.PREPARATION);
+        assertThat(game.getCurrentRound()).isEqualTo(2);
+
+        Round next = roundRepository.findByGameIdAndRoundNumber(fixture.gameId(), 2).orElseThrow();
+        assertThat(next.getState()).isEqualTo(GameStates.PREPARATION);
+        assertThat(next.getCombatSeed()).isNull();
+
+        // New plans: unlocked, gold+5; old plans untouched
+        List<RoundPlan> nextPlans = roundPlanRepository.findByRoundId(next.getId());
+        assertThat(nextPlans).hasSize(2);
+        assertThat(nextPlans).allMatch(p -> !p.isLocked());
+        assertThat(nextPlans).extracting(RoundPlan::getGold).containsOnly(15);
+
+        Integer shopOffers = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM shop_offers WHERE round_id = ?",
+                Integer.class,
+                next.getId());
+        assertThat(shopOffers).isEqualTo(6);
 
         Integer eventCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM game_events WHERE game_id = ? AND round_number = ?",
@@ -77,7 +96,7 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
                 fixture.gameId());
         assertThat(endSnapshots).isEqualTo(2);
 
-        // plans untouched (still locked formation from claim)
+        // Round-1 plans untouched (still locked formation from claim)
         RoundPlan plan0 = roundPlanRepository.findByRoundIdAndPlayerId(fixture.roundId(), fixture.player0Id())
                 .orElseThrow();
         RoundPlan plan1 = roundPlanRepository.findByRoundIdAndPlayerId(fixture.roundId(), fixture.player1Id())
@@ -87,9 +106,28 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
         assertThat(plan0.getBoardState()).isEqualTo(board0Before);
         assertThat(plan1.getBoardState()).isEqualTo(board1Before);
 
+        // Path 3 finder should not see an already-advanced round
         List<UUID> needingAdvance = roundRepository.findIdsNeedingAdvance(
                 GameStates.ROUND_RESULT, PageRequest.of(0, 50));
-        assertThat(needingAdvance).contains(fixture.roundId());
+        assertThat(needingAdvance).doesNotContain(fixture.roundId());
+    }
+
+    @Test
+    void advanceOnly_recoversUnadvancedRoundResult() {
+        Fixture fixture = seedUnadvancedRoundResult();
+
+        assertThat(roundRepository.findIdsNeedingAdvance(GameStates.ROUND_RESULT, PageRequest.of(0, 50)))
+                .contains(fixture.roundId());
+
+        job.advanceOnly(fixture.roundId());
+
+        Round completed = roundRepository.findById(fixture.roundId()).orElseThrow();
+        Game game = gameRepository.findById(fixture.gameId()).orElseThrow();
+        assertThat(completed.getState()).isEqualTo(GameStates.ROUND_RESULT);
+        assertThat(completed.getAdvancedAt()).isNotNull();
+        assertThat(game.getState()).isEqualTo(GameStates.PREPARATION);
+        assertThat(game.getCurrentRound()).isEqualTo(2);
+        assertThat(roundRepository.findByGameIdAndRoundNumber(fixture.gameId(), 2)).isPresent();
     }
 
     @Test
@@ -135,6 +173,45 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
         round = roundRepository.save(round);
 
         // Same formation as ResolutionServiceTest — deterministic DRAW with events > 0
+        RoundPlan plan0 = new RoundPlan(round.getId(), p1.getId(), 10);
+        plan0.setLocked(true);
+        plan0.setBoardState(new HashMap<>(Map.of("2,0", unit("unit_001", "Squire", 1))));
+        roundPlanRepository.save(plan0);
+
+        RoundPlan plan1 = new RoundPlan(round.getId(), p2.getId(), 10);
+        plan1.setLocked(true);
+        plan1.setBoardState(new HashMap<>(Map.of("1,2", unit("unit_002", "Squire", 1))));
+        roundPlanRepository.save(plan1);
+
+        return new Fixture(game.getId(), round.getId(), p1.getId(), p2.getId());
+    }
+
+    /** Post-TX2 checkpoint: ROUND_RESULT with advanced_at null (path 3 input). */
+    private Fixture seedUnadvancedRoundResult() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        User p1 = userRepository.save(new User("u1_" + suffix, "u1_" + suffix + "@t.com", new byte[] {1}));
+        User p2 = userRepository.save(new User("u2_" + suffix, "u2_" + suffix + "@t.com", new byte[] {1}));
+
+        Game game = Game.create(p1.getId());
+        game.setPlayer2Id(p2.getId());
+        game.setState(GameStates.ROUND_RESULT);
+        game.setCurrentRound(1);
+        game = gameRepository.save(game);
+
+        GamePlayer gp0 = new GamePlayer(game.getId(), p1.getId(), 0);
+        gp0.setKeepHp(20);
+        gamePlayerRepository.save(gp0);
+        GamePlayer gp1 = new GamePlayer(game.getId(), p2.getId(), 1);
+        gp1.setKeepHp(20);
+        gamePlayerRepository.save(gp1);
+
+        Round round = new Round(game.getId(), 1, GameStates.ROUND_RESULT, Instant.now().plusSeconds(45));
+        round.setFinishedAt(Instant.now());
+        round.setOutcome("DRAW");
+        round.setKeepDamage(Map.of("0", 0, "1", 0));
+        // advanced_at stays null
+        round = roundRepository.save(round);
+
         RoundPlan plan0 = new RoundPlan(round.getId(), p1.getId(), 10);
         plan0.setLocked(true);
         plan0.setBoardState(new HashMap<>(Map.of("2,0", unit("unit_001", "Squire", 1))));
