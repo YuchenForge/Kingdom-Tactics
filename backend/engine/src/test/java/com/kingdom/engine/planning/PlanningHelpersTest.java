@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 
-import com.kingdom.engine.domain.HoldingLane;
 
 class PlanningHelpersTest {
 
@@ -33,7 +32,7 @@ class PlanningHelpersTest {
         PlanningUnit onLane = PlanningUnit.fromShop("a", "Squire");
         PlanningUnit onBoard = PlanningUnit.fromShop("b", "Mage");
 
-        PlanningUnit[] lane = new PlanningUnit[HoldingLane.SIZE];
+        PlanningUnit[] lane = new PlanningUnit[PlanningState.LANE_SIZE];
         lane[2] = onLane;
         PlanningUnit[][] board = baseState().getBoard();
         board[1][3] = onBoard;

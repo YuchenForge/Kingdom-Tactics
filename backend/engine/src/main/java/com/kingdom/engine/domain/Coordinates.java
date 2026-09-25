@@ -3,7 +3,7 @@ package com.kingdom.engine.domain;
 /**
  * Coordinate mapping between per-player placement boards and the merged combat board.
  *
- * <p>Placement boards use local coordinates (0–3, 0–3). Combat merges both boards into
+ * Placement boards use local coordinates (0–3, 0–3). Combat merges both boards into
  * a 4×8 grid stacked vertically. Player 1 occupies the lower half unchanged. Player 0's
  * board is rotated 180° (chess perspective — facing the opponent) before occupying the
  * upper half: both row and column order are reversed.
@@ -50,55 +50,6 @@ public final class Coordinates {
             return (PLACEMENT_HEIGHT - 1) - localY;
         }
         return localY + PLAYER_1_ROW_OFFSET;
-    }
-
-    /**
-     * Convert global combat x back to local placement x.
-     */
-    public static int toLocalX(int combatX, int playerId) {
-        validatePlayerId(playerId);
-        validateLocalX(combatX);
-        if (playerId == 0) {
-            return (PLACEMENT_WIDTH - 1) - combatX;
-        }
-        return combatX;
-    }
-
-    /**
-     * Convert global combat y back to local placement y.
-     */
-    public static int toLocalY(int combatY, int playerId) {
-        validatePlayerId(playerId);
-        if (playerId == 0) {
-            validateLocalY(combatY);
-            return (PLACEMENT_HEIGHT - 1) - combatY;
-        }
-        int localY = combatY - PLAYER_1_ROW_OFFSET;
-        if (localY < 0 || localY >= PLACEMENT_HEIGHT) {
-            throw new IllegalArgumentException(
-                "Combat y " + combatY + " is outside player " + playerId + " half");
-        }
-        return localY;
-    }
-
-    /**
-     * Flat cell index for placement board storage (row-major: index = y * 4 + x).
-     */
-    public static int placementIndex(int x, int y) {
-        if (!isValidPlacement(x, y)) {
-            throw new IllegalArgumentException("Invalid placement position: (" + x + ", " + y + ")");
-        }
-        return y * PLACEMENT_WIDTH + x;
-    }
-
-    /**
-     * Flat cell index for merged combat board storage (row-major: index = y * 4 + x).
-     */
-    public static int combatIndex(int x, int y) {
-        if (!isValidCombat(x, y)) {
-            throw new IllegalArgumentException("Invalid combat position: (" + x + ", " + y + ")");
-        }
-        return y * COMBAT_WIDTH + x;
     }
 
     private static void validatePlayerId(int playerId) {

@@ -7,12 +7,13 @@ import java.util.Map;
 import java.util.Objects;
 
 import com.kingdom.engine.domain.Board;
-import com.kingdom.engine.domain.HoldingLane;
 
 /**
  * Copy-on-write planning snapshot: gold, lock, shop, lane[5], board 4×4, unit index, round.
  */
 public final class PlanningState {
+    /** Holding-lane slot count for purchased units awaiting placement. */
+    public static final int LANE_SIZE = 5;
     public static final int EARLY_BOARD_CAP = 3;
     public static final int LATE_BOARD_CAP = 5;
     public static final int LATE_BOARD_CAP_FROM_ROUND = 5;
@@ -53,7 +54,7 @@ public final class PlanningState {
             gold,
             false,
             shop,
-            new PlanningUnit[HoldingLane.SIZE],
+            new PlanningUnit[LANE_SIZE],
             new PlanningUnit[Board.WIDTH][Board.HEIGHT],
             roundNumber);
     }
@@ -110,7 +111,7 @@ public final class PlanningState {
     }
 
     public int firstEmptyLaneSlot() {
-        for (int i = 0; i < HoldingLane.SIZE; i++) {
+        for (int i = 0; i < LANE_SIZE; i++) {
             if (lane[i] == null) {
                 return i;
             }
@@ -129,7 +130,7 @@ public final class PlanningState {
     /** Lane slot index of unitId, or -1 if not on lane. */
     public int findLaneSlot(String unitId) {
         Objects.requireNonNull(unitId, "unitId");
-        for (int i = 0; i < HoldingLane.SIZE; i++) {
+        for (int i = 0; i < LANE_SIZE; i++) {
             if (lane[i] != null && unitId.equals(lane[i].getId())) {
                 return i;
             }
@@ -146,10 +147,6 @@ public final class PlanningState {
             throw new IllegalArgumentException("Invalid position: (" + x + ", " + y + ")");
         }
         return board[x][y];
-    }
-
-    public boolean isCellEmpty(int x, int y) {
-        return getBoardUnit(x, y) == null;
     }
 
     /** Board coordinates unitId, or null if not on board. */
@@ -191,9 +188,9 @@ public final class PlanningState {
 
     private static PlanningUnit[] copyLane(PlanningUnit[] lane) {
         Objects.requireNonNull(lane, "lane");
-        if (lane.length != HoldingLane.SIZE) {
+        if (lane.length != LANE_SIZE) {
             throw new IllegalArgumentException(
-                "lane must have length " + HoldingLane.SIZE + ", got " + lane.length);
+                "lane must have length " + LANE_SIZE + ", got " + lane.length);
         }
         return lane.clone();
     }

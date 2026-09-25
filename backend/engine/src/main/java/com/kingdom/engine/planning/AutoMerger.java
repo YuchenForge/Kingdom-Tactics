@@ -8,7 +8,6 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 import com.kingdom.engine.domain.Board;
-import com.kingdom.engine.domain.HoldingLane;
 import com.kingdom.engine.domain.UnitInstance;
 
 /**
@@ -44,7 +43,7 @@ public final class AutoMerger {
 
         // Collect units on lane
         PlanningUnit[] lane = state.getLane();
-        for (int i = 0; i < HoldingLane.SIZE; i++) {
+        for (int i = 0; i < PlanningState.LANE_SIZE; i++) {
             PlanningUnit unit = lane[i];
             if (unit == null || unit.getLevel() >= UnitInstance.MAX_LEVEL) {
                 continue;

@@ -78,12 +78,9 @@ public final class CommandValidator {
         if (state.getGold() < 1) {
             return Optional.of(PlanningError.INSUFFICIENT_GOLD);
         }
-        var offers = refresh.newOffers();
-        if (offers.size() != PlanningShop.SLOT_COUNT) {
-            return Optional.of(PlanningError.INVALID_REFRESH_OFFERS);
-        }
-        for (String type : offers) {
-            if (type == null || !isKnownUnitType(type)) {
+        // Size/null already enforced by PlanningCommand.Refresh constructor.
+        for (String type : refresh.newOffers()) {
+            if (!UnitTypeResolver.isKnownType(type)) {
                 return Optional.of(PlanningError.INVALID_REFRESH_OFFERS);
             }
         }
@@ -126,9 +123,5 @@ public final class CommandValidator {
             return Optional.of(PlanningError.SLOT_OCCUPIED);
         }
         return Optional.empty();
-    }
-
-    private static boolean isKnownUnitType(String type) {
-        return UnitTypeResolver.isKnownType(type);
     }
 }

@@ -3,7 +3,6 @@ package com.kingdom.engine.planning;
 import java.util.List;
 import java.util.Objects;
 
-import com.kingdom.engine.domain.HoldingLane;
 
 /**
  * Sealed command payloads for pure planning apply:
@@ -24,12 +23,12 @@ public sealed interface PlanningCommand
         /** Board cell at planning coords board[x][y] */
         record Board(int x, int y) implements Destination {}
 
-        /** Holding-lane slot index 0..HoldingLane.SIZE-1 */
+        /** Holding-lane slot index 0..PlanningState.LANE_SIZE-1 */
         record Lane(int slot) implements Destination {
             public Lane {
-                if (slot < 0 || slot >= HoldingLane.SIZE) {
+                if (slot < 0 || slot >= PlanningState.LANE_SIZE) {
                     throw new IllegalArgumentException(
-                        "lane slot must be 0.." + (HoldingLane.SIZE - 1) + ": " + slot);
+                        "lane slot must be 0.." + (PlanningState.LANE_SIZE - 1) + ": " + slot);
                 }
             }
         }

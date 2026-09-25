@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.kingdom.engine.domain.HoldingLane;
 
 class AutoMergerTest {
 
@@ -27,7 +26,7 @@ class AutoMergerTest {
     }
 
     private static PlanningState withLaneUnits(PlanningState state, PlanningUnit... units) {
-        PlanningUnit[] lane = new PlanningUnit[HoldingLane.SIZE];
+        PlanningUnit[] lane = new PlanningUnit[PlanningState.LANE_SIZE];
         System.arraycopy(units, 0, lane, 0, units.length);
         return state.withLane(lane);
     }

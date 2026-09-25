@@ -4,7 +4,6 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-import com.kingdom.engine.domain.HoldingLane;
 import com.kingdom.engine.domain.UnitTypeResolver;
 
 /**
@@ -60,7 +59,7 @@ public final class CommandApplier {
         PlanningUnit unit = PlanningUnit.fromShop(idSupplier.get(), type);
         PlanningUnit[] lane = state.getLane();
         int slot = state.firstEmptyLaneSlot();
-        if (slot < 0 || slot >= HoldingLane.SIZE) {
+        if (slot < 0 || slot >= PlanningState.LANE_SIZE) {
             throw new IllegalStateException("Lane full during buy apply");
         }
         lane[slot] = unit;

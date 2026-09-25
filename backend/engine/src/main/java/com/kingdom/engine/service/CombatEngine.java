@@ -1,21 +1,19 @@
 package com.kingdom.engine.service;
 
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import com.kingdom.engine.domain.Board;
 import com.kingdom.engine.domain.CombatBoard;
 import com.kingdom.engine.domain.CombatEvent;
+import com.kingdom.engine.domain.CombatOutcome;
 import com.kingdom.engine.domain.ResolutionResult;
 import com.kingdom.engine.domain.UnitInstance;
 
 /**
  * Deterministic combat engine.
  *
- * <p>Accepts two per-player placement boards, merges them into a 4×8 combat board,
+ * Accepts two per-player placement boards, merges them into a 4×8 combat board,
  * then runs the tick loop on global coordinates.
  */
 public class CombatEngine {
@@ -29,11 +27,22 @@ public class CombatEngine {
      * Resolve combat between two placement boards.
      */
     public ResolutionResult resolve(Board playerBoard, Board enemyBoard) {
-        CombatBoard combatBoard = CombatBoard.merge(playerBoard, enemyBoard);
-        return resolveCombatBoard(combatBoard);
+        return resolve(playerBoard, enemyBoard, MAX_TICKS);
     }
 
-    private ResolutionResult resolveCombatBoard(CombatBoard combatBoard) {
+    /**
+     * Same as {@link #resolve(Board, Board)} with a custom tick budget.
+     * Used to test endings that land on the last permitted tick.
+     */
+    public ResolutionResult resolve(Board playerBoard, Board enemyBoard, int maxTicks) {
+        if (maxTicks < 1) {
+            throw new IllegalArgumentException("maxTicks must be >= 1: " + maxTicks);
+        }
+        CombatBoard combatBoard = CombatBoard.merge(playerBoard, enemyBoard);
+        return resolveCombatBoard(combatBoard, maxTicks);
+    }
+
+    private ResolutionResult resolveCombatBoard(CombatBoard combatBoard, int maxTicks) {
         List<CombatEvent> events = new ArrayList<>();
 
         int tick = 0;
@@ -41,11 +50,8 @@ public class CombatEngine {
             events.add(CombatEvent.unitPlaced(tick, unit));
         }
 
-        boolean combatEnded = false;
-        for (tick = 0; tick < MAX_TICKS; tick++) {
+        for (tick = 0; tick < maxTicks; tick++) {
             if (combatBoard.isEmptyForPlayer(0) || combatBoard.isEmptyForPlayer(1)) {
-                events.add(CombatEvent.combatEnded(tick, determineEndReason(combatBoard)));
-                combatEnded = true;
                 break;
             }
 
@@ -53,21 +59,15 @@ public class CombatEngine {
                 unit.decrementCooldown();
             }
 
-            List<UnitInstance> allUnits = new ArrayList<>(combatBoard.getAliveUnits());
-            allUnits.sort(Comparator.comparing(UnitInstance::getId));
-
-            Set<String> scheduledActors = new HashSet<>();
-            for (UnitInstance unit : allUnits) {
-                if (unit.isAlive() && unit.canAct()) {
-                    scheduledActors.add(unit.getId());
+            // Snapshot ready actors in ID order at tick start; they may still act after dying mid-tick.
+            List<UnitInstance> actors = new ArrayList<>();
+            for (UnitInstance unit : combatBoard.getAliveUnits()) {
+                if (unit.canAct()) {
+                    actors.add(unit);
                 }
             }
 
-            for (UnitInstance unit : allUnits) {
-                if (!scheduledActors.contains(unit.getId())) {
-                    continue;
-                }
-
+            for (UnitInstance unit : actors) {
                 int playerId = unit.getPlayerId();
                 int enemyPlayerId = playerId == 0 ? 1 : 0;
                 List<UnitInstance> enemies = combatBoard.getAliveUnitsForPlayer(enemyPlayerId);
@@ -89,31 +89,29 @@ public class CombatEngine {
             combatBoard.removeDead();
         }
 
-        String endReason = determineEndReason(combatBoard);
-        if (!combatEnded && "TIME_LIMIT".equals(endReason)) {
-            events.add(CombatEvent.combatEnded(tick, endReason));
-        }
+        CombatOutcome endReason = determineEndReason(combatBoard);
+        events.add(CombatEvent.combatEnded(tick, endReason.name()));
 
         int winnerPlayerId = determineWinner(combatBoard);
         int[] keepDamageByPlayer = ResolutionResult.calculateKeepDamageByPlayer(combatBoard, winnerPlayerId);
 
         return new ResolutionResult(
-            events, combatBoard, keepDamageByPlayer, tick, endReason, winnerPlayerId);
+            events, combatBoard, keepDamageByPlayer, tick, endReason.name(), winnerPlayerId);
     }
 
-    private static String determineEndReason(CombatBoard combatBoard) {
+    private static CombatOutcome determineEndReason(CombatBoard combatBoard) {
         boolean empty0 = combatBoard.isEmptyForPlayer(0);
         boolean empty1 = combatBoard.isEmptyForPlayer(1);
         if (empty0 && empty1) {
-            return "DRAW";
+            return CombatOutcome.DRAW;
         }
         if (empty0) {
-            return "ENEMY_VICTORY";
+            return CombatOutcome.ENEMY_VICTORY;
         }
         if (empty1) {
-            return "PLAYER_VICTORY";
+            return CombatOutcome.PLAYER_VICTORY;
         }
-        return "TIME_LIMIT";
+        return CombatOutcome.TIME_LIMIT;
     }
 
     /**

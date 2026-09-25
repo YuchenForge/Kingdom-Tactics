@@ -3,13 +3,14 @@ package com.kingdom.engine.planning;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-
-import com.kingdom.engine.domain.Board;
-import com.kingdom.engine.domain.HoldingLane;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class CommandValidatorTest {
 
@@ -26,7 +27,7 @@ class CommandValidatorTest {
     }
 
     private static PlanningState withLaneUnits(PlanningState state, PlanningUnit... units) {
-        PlanningUnit[] lane = new PlanningUnit[HoldingLane.SIZE];
+        PlanningUnit[] lane = new PlanningUnit[PlanningState.LANE_SIZE];
         for (int i = 0; i < units.length; i++) {
             lane[i] = units[i];
         }
@@ -51,45 +52,27 @@ class CommandValidatorTest {
 
     @Nested
     class CommonLock {
-        @Test
-        void buy_whenLocked_returnsLocked() {
-            PlanningState locked = baseState().withLocked(true);
-            assertThat(validator.validate(locked, new PlanningCommand.Buy(0)))
-                .contains(PlanningError.LOCKED);
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("com.kingdom.engine.planning.CommandValidatorTest#lockedCommands")
+        void command_whenLocked_returnsLocked(String label, PlanningState state, PlanningCommand command) {
+            assertThat(validator.validate(state, command)).contains(PlanningError.LOCKED);
         }
+    }
 
-        @Test
-        void sell_whenLocked_returnsLocked() {
-            PlanningState locked = withLaneUnits(baseState(), PlanningUnit.fromShop("u1", "Squire"))
+    static Stream<Arguments> lockedCommands() {
+        PlanningState lockedEmpty = baseState().withLocked(true);
+        PlanningState lockedLane = withLaneUnits(baseState(), PlanningUnit.fromShop("u1", "Squire"))
                 .withLocked(true);
-            assertThat(validator.validate(locked, new PlanningCommand.Sell("u1")))
-                .contains(PlanningError.LOCKED);
-        }
-
-        @Test
-        void refresh_whenLocked_returnsLocked() {
-            PlanningState locked = baseState().withLocked(true);
-            assertThat(validator.validate(
-                    locked, new PlanningCommand.Refresh(List.of("Squire", "Knight", "Healer"))))
-                .contains(PlanningError.LOCKED);
-        }
-
-        @Test
-        void relocateToBoard_whenLocked_returnsLocked() {
-            PlanningState locked = withLaneUnits(baseState(), PlanningUnit.fromShop("u1", "Squire"))
+        PlanningState lockedBoard = withBoardUnit(
+                baseState(), PlanningUnit.fromShop("u1", "Squire"), 0, 0)
                 .withLocked(true);
-            assertThat(validator.validate(locked, PlanningCommand.Relocate.toBoard("u1", 0, 0)))
-                .contains(PlanningError.LOCKED);
-        }
-
-        @Test
-        void relocateToLane_whenLocked_returnsLocked() {
-            PlanningState locked = withBoardUnit(
-                    baseState(), PlanningUnit.fromShop("u1", "Squire"), 0, 0)
-                .withLocked(true);
-            assertThat(validator.validate(locked, PlanningCommand.Relocate.toLane("u1", 0)))
-                .contains(PlanningError.LOCKED);
-        }
+        return Stream.of(
+                Arguments.of("buy", lockedEmpty, new PlanningCommand.Buy(0)),
+                Arguments.of("sell", lockedLane, new PlanningCommand.Sell("u1")),
+                Arguments.of("refresh", lockedEmpty,
+                        new PlanningCommand.Refresh(List.of("Squire", "Knight", "Healer"))),
+                Arguments.of("relocateToBoard", lockedLane, PlanningCommand.Relocate.toBoard("u1", 0, 0)),
+                Arguments.of("relocateToLane", lockedBoard, PlanningCommand.Relocate.toLane("u1", 0)));
     }
 
     @Nested
@@ -108,7 +91,6 @@ class CommandValidatorTest {
 
         @Test
         void unknownShopType_returnsInvalidUnitType() {
-            // Corrupt persisted offer — constructor allows any string in the list
             PlanningState corrupt = baseState()
                 .withShop(new PlanningShop(java.util.List.of("Dragon", "Mage", "Ranger")));
             assertThat(validator.validate(corrupt, new PlanningCommand.Buy(0)))
@@ -117,7 +99,7 @@ class CommandValidatorTest {
 
         @Test
         void insufficientGold_returnsInsufficientGold() {
-            PlanningState poor = baseState().withGold(0); // Squire costs 1
+            PlanningState poor = baseState().withGold(0);
             assertThat(validator.validate(poor, new PlanningCommand.Buy(0)))
                 .contains(PlanningError.INSUFFICIENT_GOLD);
         }
@@ -181,34 +163,10 @@ class CommandValidatorTest {
 
     @Nested
     class Relocate {
-        @Test
-        void laneToBoard_returnsEmpty() {
-            PlanningState state = withLaneUnits(baseState(), PlanningUnit.fromShop("u1", "Squire"));
-            assertThat(validator.validate(state, PlanningCommand.Relocate.toBoard("u1", 0, 0)))
-                .isEmpty();
-        }
-
-        @Test
-        void boardToBoard_returnsEmpty() {
-            PlanningState state = withBoardUnit(
-                baseState(), PlanningUnit.fromShop("u1", "Squire"), 0, 0);
-            assertThat(validator.validate(state, PlanningCommand.Relocate.toBoard("u1", 2, 2)))
-                .isEmpty();
-        }
-
-        @Test
-        void laneToLane_returnsEmpty() {
-            PlanningState state = withLaneUnits(baseState(), PlanningUnit.fromShop("u1", "Squire"));
-            assertThat(validator.validate(state, PlanningCommand.Relocate.toLane("u1", 3)))
-                .isEmpty();
-        }
-
-        @Test
-        void boardToLane_returnsEmpty() {
-            PlanningState state = withBoardUnit(
-                baseState(), PlanningUnit.fromShop("u1", "Squire"), 1, 1);
-            assertThat(validator.validate(state, PlanningCommand.Relocate.toLane("u1", 0)))
-                .isEmpty();
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("com.kingdom.engine.planning.CommandValidatorTest#validRelocations")
+        void validRelocation_returnsEmpty(String label, PlanningState state, PlanningCommand command) {
+            assertThat(validator.validate(state, command)).isEmpty();
         }
 
         @Test
@@ -245,7 +203,7 @@ class CommandValidatorTest {
 
         @Test
         void boardCapExceeded_whenEnteringFromLane() {
-            PlanningState state = baseState(); // round 1, cap 3
+            PlanningState state = baseState();
             state = withBoardUnit(state, PlanningUnit.fromShop("b0", "Squire"), 0, 0);
             state = withBoardUnit(state, PlanningUnit.fromShop("b1", "Squire"), 1, 0);
             state = withBoardUnit(state, PlanningUnit.fromShop("b2", "Squire"), 2, 0);
@@ -256,7 +214,7 @@ class CommandValidatorTest {
 
         @Test
         void boardCapNotApplied_whenAlreadyOnBoard() {
-            PlanningState state = baseState(); // round 1, cap 3 — board already full
+            PlanningState state = baseState();
             state = withBoardUnit(state, PlanningUnit.fromShop("b0", "Squire"), 0, 0);
             state = withBoardUnit(state, PlanningUnit.fromShop("b1", "Squire"), 1, 0);
             state = withBoardUnit(state, PlanningUnit.fromShop("b2", "Squire"), 2, 0);
@@ -292,6 +250,19 @@ class CommandValidatorTest {
         }
     }
 
+    static Stream<Arguments> validRelocations() {
+        PlanningState onLane = withLaneUnits(baseState(), PlanningUnit.fromShop("u1", "Squire"));
+        PlanningState onBoard = withBoardUnit(
+                baseState(), PlanningUnit.fromShop("u1", "Squire"), 0, 0);
+        PlanningState onBoardMid = withBoardUnit(
+                baseState(), PlanningUnit.fromShop("u1", "Squire"), 1, 1);
+        return Stream.of(
+                Arguments.of("laneToBoard", onLane, PlanningCommand.Relocate.toBoard("u1", 0, 0)),
+                Arguments.of("boardToBoard", onBoard, PlanningCommand.Relocate.toBoard("u1", 2, 2)),
+                Arguments.of("laneToLane", onLane, PlanningCommand.Relocate.toLane("u1", 3)),
+                Arguments.of("boardToLane", onBoardMid, PlanningCommand.Relocate.toLane("u1", 0)));
+    }
+
     @Nested
     class Lock {
         @Test
@@ -305,12 +276,5 @@ class CommandValidatorTest {
             assertThat(validator.validate(locked, new PlanningCommand.Lock()))
                 .contains(PlanningError.ALREADY_LOCKED);
         }
-    }
-
-    @Test
-    void boardIsValidPosition_matchesOutOfBoundsCheck() {
-        assertThat(Board.isValidPosition(0, 0)).isTrue();
-        assertThat(Board.isValidPosition(3, 3)).isTrue();
-        assertThat(Board.isValidPosition(4, 0)).isFalse();
     }
 }

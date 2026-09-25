@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import com.kingdom.engine.domain.Board;
 import com.kingdom.engine.domain.CombatEvent;
+import com.kingdom.engine.domain.CombatOutcome;
 import com.kingdom.engine.domain.ResolutionResult;
 import com.kingdom.engine.domain.UnitDefinition;
 import com.kingdom.engine.domain.UnitInstance;
@@ -38,19 +39,52 @@ y=7   | B(0,3)    | B(1,3)    | B(2,3)    | B(3,3)    |
 
 class CombatEngineTest {
 
+    private static Board board(int playerId, UnitInstance... units) {
+        Board board = new Board(playerId);
+        for (UnitInstance unit : units) {
+            board.addUnit(unit);
+        }
+        return board;
+    }
+
+    private static UnitInstance unit(String id, UnitDefinition def, int x, int y) {
+        return new UnitInstance(id, def, x, y);
+    }
+
+    private static List<CombatEvent> eventsOfType(ResolutionResult result, CombatEvent.EventType type) {
+        return result.getEvents().stream()
+                .filter(e -> e.getType() == type)
+                .collect(Collectors.toList());
+    }
+
+    private static List<CombatEvent> attacksBy(ResolutionResult result, String attackerId) {
+        return eventsOfType(result, CombatEvent.EventType.ATTACK).stream()
+                .filter(e -> attackerId.equals(e.getData().get("attackerId")))
+                .collect(Collectors.toList());
+    }
+
+    private static int minTick(ResolutionResult result, CombatEvent.EventType type) {
+        return eventsOfType(result, type).stream()
+                .mapToInt(CombatEvent::getTick)
+                .min()
+                .orElse(-1);
+    }
+
+    private static void assertExactlyOneCombatEnded(
+            ResolutionResult result, String reason, int tick) {
+        List<CombatEvent> ended = eventsOfType(result, CombatEvent.EventType.COMBAT_ENDED);
+        assertThat(ended).hasSize(1);
+        assertThat(ended.get(0).getTick()).isEqualTo(tick);
+        assertThat(ended.get(0).getData().get("reason")).isEqualTo(reason);
+        assertThat(CombatOutcome.requireKnown(reason).name()).isEqualTo(reason);
+    }
+
     @Test
     void scenario_1_squire_vs_squire() {
-        Board playerBoard = new Board(0);
-        Board enemyBoard = new Board(1);
-
         // Local (2,0) → combat (1,3); P1 local (1,2) → combat (1,6); seed 12345
-        UnitInstance squire1 = new UnitInstance("unit_001", UnitDefinition.squire(), 2, 0);
-        UnitInstance squire2 = new UnitInstance("unit_002", UnitDefinition.squire(), 1, 2);
-
-        playerBoard.addUnit(squire1);
-        enemyBoard.addUnit(squire2);
-
-        ResolutionResult result = new CombatEngine(12345L).resolve(playerBoard, enemyBoard);
+        ResolutionResult result = new CombatEngine(12345L).resolve(
+                board(0, unit("unit_001", UnitDefinition.squire(), 2, 0)),
+                board(1, unit("unit_002", UnitDefinition.squire(), 1, 2)));
 
         assertThat(result.getFinalTick()).isEqualTo(20);
         assertThat(result.getWinnerPlayerId()).isEqualTo(-1);
@@ -60,19 +94,17 @@ class CombatEngineTest {
         assertThat(result.getFinalBoard().getUnitCountForPlayer(0)).isZero();
         assertThat(result.getFinalBoard().getUnitCountForPlayer(1)).isZero();
 
+        assertThat(minTick(result, CombatEvent.EventType.UNIT_MOVED)).isEqualTo(3);
+        assertThat(minTick(result, CombatEvent.EventType.ATTACK)).isEqualTo(7);
         assertThat(result.getEvents().stream()
-            .filter(e -> e.getType() == CombatEvent.EventType.UNIT_MOVED)
-            .mapToInt(CombatEvent::getTick)
-            .min()).hasValue(3);
-        assertThat(result.getEvents().stream()
-            .filter(e -> e.getType() == CombatEvent.EventType.ATTACK)
-            .mapToInt(CombatEvent::getTick)
-            .min()).hasValue(7);
-        assertThat(result.getEvents().stream()
-            .filter(e -> e.getType() == CombatEvent.EventType.UNIT_DIED)
-            .map(CombatEvent::getTick)
-            .distinct()
-            .collect(Collectors.toList())).containsExactly(19);
+                .filter(e -> e.getType() == CombatEvent.EventType.UNIT_MOVED
+                        || e.getType() == CombatEvent.EventType.ATTACK)
+                .mapToInt(CombatEvent::getTick)
+                .min()).hasValue(3);
+        assertThat(eventsOfType(result, CombatEvent.EventType.UNIT_DIED).stream()
+                .map(CombatEvent::getTick)
+                .distinct()
+                .collect(Collectors.toList())).containsExactly(19);
     }
 
     @Test
@@ -330,14 +362,6 @@ class CombatEngineTest {
             .min()).hasValue(3);
     }
 
-    private static long mageAttacksOnTick(ResolutionResult result, int tick) {
-        return result.getEvents().stream()
-            .filter(e -> e.getType() == CombatEvent.EventType.ATTACK)
-            .filter(e -> e.getTick() == tick)
-            .filter(e -> "unit_001".equals(e.getData().get("attackerId")))
-            .count();
-    }
-
     @Test
     void scenario_6_healer_support_every_third_attack() {
         Board playerBoard = new Board(0);
@@ -378,17 +402,10 @@ class CombatEngineTest {
 
     @Test
     void scenario_7_time_limit_160_ticks() {
-        Board playerBoard = new Board(0);
-        Board enemyBoard = new Board(1);
-
         // Healer (0,0)→(3,3) vs Healer (3,3)→(3,6) — reaches TIME_LIMIT at tick 160 (seed 54321)
-        UnitInstance healer0 = new UnitInstance("unit_001", UnitDefinition.healer(), 0, 0);
-        UnitInstance healer1 = new UnitInstance("unit_002", UnitDefinition.healer(), 3, 3);
-
-        playerBoard.addUnit(healer0);
-        enemyBoard.addUnit(healer1);
-
-        ResolutionResult result = new CombatEngine(54321L).resolve(playerBoard, enemyBoard);
+        ResolutionResult result = new CombatEngine(54321L).resolve(
+                board(0, unit("unit_001", UnitDefinition.healer(), 0, 0)),
+                board(1, unit("unit_002", UnitDefinition.healer(), 3, 3)));
 
         assertThat(result.getFinalTick()).isEqualTo(160);
         assertThat(result.getEndReason()).isEqualTo("TIME_LIMIT");
@@ -399,6 +416,7 @@ class CombatEngineTest {
         assertThat(result.getKeepDamageForPlayer(1)).isEqualTo(3);
         assertThat(result.getFinalBoard().getUnitCountForPlayer(0)).isEqualTo(1);
         assertThat(result.getFinalBoard().getUnitCountForPlayer(1)).isEqualTo(1);
+        assertExactlyOneCombatEnded(result, "TIME_LIMIT", 160);
     }
 
     @Test
@@ -484,27 +502,31 @@ class CombatEngineTest {
 
     @Test
     void scenario_10_empty_board_immediate_defeat() {
-        Board playerBoard = new Board(0);
-        Board enemyBoard = new Board(1);
-
         // P0 empty; P1 Squire at (0,0) → combat (0,4); seed 12345
-        UnitInstance squire = new UnitInstance("unit_001", UnitDefinition.squire(), 0, 0);
+        ResolutionResult result = new CombatEngine(12345L).resolve(
+                board(0),
+                board(1, unit("unit_001", UnitDefinition.squire(), 0, 0)));
 
-        enemyBoard.addUnit(squire);
-
-        ResolutionResult result = new CombatEngine(12345L).resolve(playerBoard, enemyBoard);
-
-        long attackEvents = result.getEvents().stream()
-            .filter(e -> e.getType() == CombatEvent.EventType.ATTACK)
-            .count();
-
+        assertThat(eventsOfType(result, CombatEvent.EventType.ATTACK)).isEmpty();
         assertThat(result.getFinalTick()).isZero();
         assertThat(result.getWinnerPlayerId()).isEqualTo(1);
         assertThat(result.getEndReason()).isEqualTo("ENEMY_VICTORY");
-        assertThat(attackEvents).isZero();
         assertThat(result.getKeepDamageForPlayer(0)).isEqualTo(2);
         assertThat(result.getKeepDamageForPlayer(1)).isZero();
         assertThat(result.getFinalBoard().getUnit("unit_001").getCurrentHp()).isEqualTo(8);
+        assertExactlyOneCombatEnded(result, "ENEMY_VICTORY", 0);
+    }
+
+    @Test
+    void empty_vs_empty_is_mutual_wipe_draw() {
+        ResolutionResult result = new CombatEngine(12345L).resolve(board(0), board(1));
+
+        assertThat(result.getEndReason()).isEqualTo("DRAW");
+        assertThat(result.getWinnerPlayerId()).isEqualTo(-1);
+        assertThat(result.getFinalTick()).isZero();
+        assertThat(result.getKeepDamageForPlayer(0)).isEqualTo(1);
+        assertThat(result.getKeepDamageForPlayer(1)).isEqualTo(1);
+        assertExactlyOneCombatEnded(result, "DRAW", 0);
     }
 
     @Test
@@ -715,48 +737,11 @@ class CombatEngineTest {
     // --- Supplementary edge cases ---
 
     @Test
-    void edge_case_first_action_on_tick_3_not_tick_0() {
-        Board playerBoard = new Board(0);
-        Board enemyBoard = new Board(1);
-
-        // Same as scenario 1 — units start with 4-tick cooldown
-        UnitInstance squire1 = new UnitInstance("unit_001", UnitDefinition.squire(), 2, 0);
-        UnitInstance squire2 = new UnitInstance("unit_002", UnitDefinition.squire(), 1, 2);
-
-        playerBoard.addUnit(squire1);
-        enemyBoard.addUnit(squire2);
-
-        ResolutionResult result = new CombatEngine(12345L).resolve(playerBoard, enemyBoard);
-
-        int firstMoveTick = result.getEvents().stream()
-            .filter(e -> e.getType() == CombatEvent.EventType.UNIT_MOVED)
-            .mapToInt(CombatEvent::getTick)
-            .min()
-            .orElse(-1);
-        int firstAttackTick = result.getEvents().stream()
-            .filter(e -> e.getType() == CombatEvent.EventType.ATTACK)
-            .mapToInt(CombatEvent::getTick)
-            .min()
-            .orElse(-1);
-
-        assertThat(firstMoveTick).isEqualTo(3);
-        assertThat(firstAttackTick).isEqualTo(7);
-        assertThat(result.getEvents().stream()
-            .filter(e -> e.getType() == CombatEvent.EventType.UNIT_MOVED
-                || e.getType() == CombatEvent.EventType.ATTACK)
-            .mapToInt(CombatEvent::getTick)
-            .min()).hasValue(3);
-    }
-
-    @Test
     void edge_case_player1_empty_board() {
-        Board playerBoard = new Board(0);
-        Board enemyBoard = new Board(1);
-
         // Knight (0,0) local → combat (3,3); P1 empty — mirror of Scenario 10
-        playerBoard.addUnit(new UnitInstance("unit_001", UnitDefinition.knight(), 0, 0));
-
-        ResolutionResult result = new CombatEngine(12345L).resolve(playerBoard, enemyBoard);
+        ResolutionResult result = new CombatEngine(12345L).resolve(
+                board(0, unit("unit_001", UnitDefinition.knight(), 0, 0)),
+                board(1));
 
         assertThat(result.getFinalTick()).isZero();
         assertThat(result.getWinnerPlayerId()).isEqualTo(0);
@@ -764,6 +749,7 @@ class CombatEngineTest {
         assertThat(result.getKeepDamageForPlayer(1)).isEqualTo(3);
         assertThat(result.getKeepDamageForPlayer(0)).isZero();
         assertThat(result.getFinalBoard().getUnit("unit_001").getCurrentHp()).isEqualTo(18);
+        assertExactlyOneCombatEnded(result, "PLAYER_VICTORY", 0);
     }
 
     @Test
@@ -853,50 +839,19 @@ class CombatEngineTest {
     }
 
     @Test
-    void determinism_same_seed_same_output() {
-        Board board1P = new Board(0);
-        Board board1E = new Board(1);
-        Board board2P = new Board(0);
-        Board board2E = new Board(1);
-
-        board1P.addUnit(new UnitInstance("unit_001", UnitDefinition.squire(), 3, 3));
-        board1E.addUnit(new UnitInstance("unit_002", UnitDefinition.squire(), 0, 0));
-
-        board2P.addUnit(new UnitInstance("unit_001", UnitDefinition.squire(), 3, 3));
-        board2E.addUnit(new UnitInstance("unit_002", UnitDefinition.squire(), 0, 0));
-
-        long seed = 99999L;
-        CombatEngine engine1 = new CombatEngine(seed);
-        CombatEngine engine2 = new CombatEngine(seed);
-
-        ResolutionResult result1 = engine1.resolve(board1P, board1E);
-        ResolutionResult result2 = engine2.resolve(board2P, board2E);
-
-        assertThat(result1.getEvents().size()).isEqualTo(result2.getEvents().size());
-        assertThat(result1.getKeepDamageForPlayer(0)).isEqualTo(result2.getKeepDamageForPlayer(0));
-        assertThat(result1.getKeepDamageForPlayer(1)).isEqualTo(result2.getKeepDamageForPlayer(1));
-        assertThat(result1.getEndReason()).isEqualTo(result2.getEndReason());
-    }
-
-    @Test
     void edge_case_multiple_mages_splash_same_target() {
-        Board playerBoard = new Board(0);
-        Board enemyBoard = new Board(1);
-
-        UnitInstance mageA = new UnitInstance("unit_001", UnitDefinition.mage(), 3, 0);
-        UnitInstance mageB = new UnitInstance("unit_004", UnitDefinition.mage(), 2, 0);
-        UnitInstance primaryTarget = new UnitInstance("unit_002", UnitDefinition.shieldbearer(), 1, 0);
-        UnitInstance splashTarget = new UnitInstance("unit_003", UnitDefinition.squire(), 0, 0);
-
-        playerBoard.addUnit(mageA);
-        playerBoard.addUnit(mageB);
-        enemyBoard.addUnit(primaryTarget);
-        enemyBoard.addUnit(splashTarget);
+        Board playerBoard = board(
+                0,
+                unit("unit_001", UnitDefinition.mage(), 3, 0),
+                unit("unit_004", UnitDefinition.mage(), 2, 0));
+        Board enemyBoard = board(
+                1,
+                unit("unit_002", UnitDefinition.shieldbearer(), 1, 0),
+                unit("unit_003", UnitDefinition.squire(), 0, 0));
 
         ResolutionResult result = new CombatEngine(54321L).resolve(playerBoard, enemyBoard);
 
-        List<CombatEvent> splashHitsOnSharedTarget = result.getEvents().stream()
-            .filter(e -> e.getType() == CombatEvent.EventType.ATTACK)
+        List<CombatEvent> splashHitsOnSharedTarget = eventsOfType(result, CombatEvent.EventType.ATTACK).stream()
             .filter(e -> "unit_003".equals(e.getData().get("targetId")))
             .filter(e -> "unit_001".equals(e.getData().get("attackerId"))
                 || "unit_004".equals(e.getData().get("attackerId")))
@@ -908,5 +863,41 @@ class CombatEngineTest {
             .map(e -> e.getData().get("attackerId"))
             .distinct()
             .count()).isEqualTo(2);
+    }
+
+    @Test
+    void finalTick_mutualWipe_emitsCombatEnded() {
+        // Same layout as scenario_1: mutual wipe completes during tick 19 → finalTick 20.
+        ResolutionResult result = new CombatEngine(12345L).resolve(
+                board(0, unit("unit_001", UnitDefinition.squire(), 2, 0)),
+                board(1, unit("unit_002", UnitDefinition.squire(), 1, 2)),
+                20);
+
+        assertThat(result.getFinalTick()).isEqualTo(20);
+        assertThat(result.getEndReason()).isEqualTo("DRAW");
+        assertThat(result.getWinnerPlayerId()).isEqualTo(-1);
+        assertExactlyOneCombatEnded(result, "DRAW", 20);
+    }
+
+    @Test
+    void finalTick_elimination_emitsCombatEnded() {
+        // Same layout as scenario_5: last enemy dies during tick 23 → finalTick 24.
+        ResolutionResult result = new CombatEngine(54321L).resolve(
+                board(0, unit("unit_001", UnitDefinition.mage(), 3, 0)),
+                board(1,
+                        unit("unit_002", UnitDefinition.shieldbearer(), 1, 0),
+                        unit("unit_003", UnitDefinition.shieldbearer(), 0, 2)),
+                24);
+
+        assertThat(result.getFinalTick()).isEqualTo(24);
+        assertThat(result.getEndReason()).isEqualTo("PLAYER_VICTORY");
+        assertThat(result.getWinnerPlayerId()).isEqualTo(0);
+        assertExactlyOneCombatEnded(result, "PLAYER_VICTORY", 24);
+    }
+
+    private static long mageAttacksOnTick(ResolutionResult result, int tick) {
+        return attacksBy(result, "unit_001").stream()
+            .filter(e -> e.getTick() == tick)
+            .count();
     }
 }

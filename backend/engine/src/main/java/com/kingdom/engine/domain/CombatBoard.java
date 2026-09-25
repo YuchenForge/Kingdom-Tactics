@@ -18,16 +18,13 @@ public class CombatBoard {
     public static final int HEIGHT = Coordinates.COMBAT_HEIGHT;
 
     private final Map<String, UnitInstance> unitMap;
-    private final Map<String, Integer> unitPlayerIds;
 
     public CombatBoard() {
         this.unitMap = new HashMap<>();
-        this.unitPlayerIds = new HashMap<>();
     }
 
     public CombatBoard(CombatBoard other) {
         this.unitMap = new HashMap<>();
-        this.unitPlayerIds = new HashMap<>(other.unitPlayerIds);
         for (Map.Entry<String, UnitInstance> entry : other.unitMap.entrySet()) {
             UnitInstance copy = copyUnit(entry.getValue());
             this.unitMap.put(entry.getKey(), copy);
@@ -92,12 +89,10 @@ public class CombatBoard {
             throw new IllegalArgumentException("Position occupied: (" + unit.getX() + ", " + unit.getY() + ")");
         }
         unitMap.put(unit.getId(), unit);
-        unitPlayerIds.put(unit.getId(), unit.getPlayerId());
     }
 
     public void removeUnit(String unitId) {
         unitMap.remove(unitId);
-        unitPlayerIds.remove(unitId);
     }
 
     public List<UnitInstance> getAllUnits() {
@@ -119,10 +114,6 @@ public class CombatBoard {
 
     public UnitInstance getUnit(String unitId) {
         return unitMap.get(unitId);
-    }
-
-    public Integer getPlayerIdForUnit(String unitId) {
-        return unitPlayerIds.get(unitId);
     }
 
     public boolean isOccupied(int x, int y) {

@@ -143,7 +143,7 @@ class CombatBoardTest {
 
         assertThat(original.getUnit("unit_001").getCurrentHp()).isEqualTo(6);
         assertThat(copy.getUnit("unit_001").getCurrentHp()).isEqualTo(3);
-        assertThat(copy.getPlayerIdForUnit("unit_001")).isEqualTo(0);
+        assertThat(copy.getUnit("unit_001").getPlayerId()).isEqualTo(0);
     }
 
     @Test
