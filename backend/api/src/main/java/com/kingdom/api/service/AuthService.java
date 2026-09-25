@@ -20,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -42,7 +44,7 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        String email = request.email().toLowerCase();
+        String email = request.email().toLowerCase(Locale.ROOT);
         if (userRepository.existsByEmail(email)) {
             throw new DuplicateUserException("email");
         }
@@ -60,8 +62,14 @@ public class AuthService {
         } catch (DataIntegrityViolationException e) {
             // UNIQUE(email) / UNIQUE(username) race — another request won the insert.
             // Do not re-query: Postgres has aborted this transaction after DIV.
-            log.info("Registration rejected: unique constraint race");
-            throw new DuplicateUserException(duplicateFieldFrom(e));
+            // Only map known uniqueness violations; other integrity errors (e.g. length)
+            // must not be misreported as duplicates.
+            Optional<String> field = uniqueConflictField(e);
+            if (field.isPresent()) {
+                log.info("Registration rejected: unique constraint race");
+                throw new DuplicateUserException(field.get());
+            }
+            throw e;
         }
 
         MDC.put("userId", user.getId().toString());
@@ -72,7 +80,7 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.email().toLowerCase())
+        User user = userRepository.findByEmail(request.email().toLowerCase(Locale.ROOT))
                 .orElseThrow(InvalidCredentialsException::new);
 
         String hash = new String(user.getPasswordHash(), StandardCharsets.UTF_8);
@@ -93,9 +101,20 @@ public class AuthService {
         return UserMapper.toUserResponse(user);
     }
 
-    /** Prefer username when the constraint name says so; otherwise email. No DB access. */
-    private static String duplicateFieldFrom(DataIntegrityViolationException e) {
-        String detail = String.valueOf(e.getMostSpecificCause().getMessage()).toLowerCase();
-        return detail.contains("username") ? "username" : "email";
+    /**
+     * Maps only known UNIQUE constraint races to a conflict field. No DB access.
+     * Returns empty for non-uniqueness integrity failures (e.g. value too long).
+     */
+    private static Optional<String> uniqueConflictField(DataIntegrityViolationException e) {
+        String detail = String.valueOf(e.getMostSpecificCause().getMessage()).toLowerCase(Locale.ROOT);
+        if (detail.contains("users_username_key")
+                || (detail.contains("unique") && detail.contains("username"))) {
+            return Optional.of("username");
+        }
+        if (detail.contains("users_email_key")
+                || (detail.contains("unique") && detail.contains("email"))) {
+            return Optional.of("email");
+        }
+        return Optional.empty();
     }
 }

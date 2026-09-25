@@ -1,11 +1,9 @@
 package com.kingdom.api.service;
 
-import com.kingdom.api.dto.ShopSlotDto;
 import com.kingdom.api.entity.GameStates;
 import com.kingdom.api.entity.Round;
 import com.kingdom.api.entity.ShopOffer;
 import com.kingdom.api.repository.ShopOfferRepository;
-import com.kingdom.engine.domain.UnitTypeResolver;
 import com.kingdom.engine.planning.PlanningShop;
 import com.kingdom.engine.planning.ShopGenerator;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +20,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
@@ -48,33 +45,33 @@ class ShopServiceTest {
     }
 
     @Test
-    void createShopForPlayer_insertsThreeRowsAtRefreshZero() {
-        List<String> expected = ShopGenerator.generateOfferTypes(gameId, 1, playerId, 0);
-
-        shopService.createShopForPlayer(roundId, gameId, 1, playerId);
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<ShopOffer>> captor = ArgumentCaptor.forClass(List.class);
-        verify(shopOfferRepository).saveAll(captor.capture());
-
-        List<ShopOffer> saved = captor.getValue();
-        assertThat(saved).hasSize(3);
-        for (int slot = 0; slot < 3; slot++) {
-            assertThat(saved.get(slot).getRoundId()).isEqualTo(roundId);
-            assertThat(saved.get(slot).getPlayerId()).isEqualTo(playerId);
-            assertThat(saved.get(slot).getSlot()).isEqualTo(slot);
-            assertThat(saved.get(slot).getUnitType()).isEqualTo(expected.get(slot));
-        }
-    }
-
-    @Test
-    void createShopsForRound_createsBothPlayers() {
-        Round round = new Round(gameId, 2, GameStates.PREPARATION, java.time.Instant.now());
+    void createShopsForRound_insertsThreeRowsPerPlayerAtRefreshZero() {
+        Round round = new Round(gameId, 1, GameStates.PREPARATION, java.time.Instant.now());
         ReflectionTestUtils.setField(round, "id", roundId);
+        List<String> expectedP1 = ShopGenerator.generateOfferTypes(gameId, 1, playerId, 0);
+        List<String> expectedP2 = ShopGenerator.generateOfferTypes(gameId, 1, player2Id, 0);
 
         shopService.createShopsForRound(round, gameId, playerId, player2Id);
 
-        verify(shopOfferRepository, times(2)).saveAll(any());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ShopOffer>> captor = ArgumentCaptor.forClass(List.class);
+        verify(shopOfferRepository, times(2)).saveAll(captor.capture());
+
+        List<ShopOffer> savedP1 = captor.getAllValues().get(0);
+        assertThat(savedP1).hasSize(3);
+        for (int slot = 0; slot < 3; slot++) {
+            assertThat(savedP1.get(slot).getRoundId()).isEqualTo(roundId);
+            assertThat(savedP1.get(slot).getPlayerId()).isEqualTo(playerId);
+            assertThat(savedP1.get(slot).getSlot()).isEqualTo(slot);
+            assertThat(savedP1.get(slot).getUnitType()).isEqualTo(expectedP1.get(slot));
+        }
+
+        List<ShopOffer> savedP2 = captor.getAllValues().get(1);
+        assertThat(savedP2).hasSize(3);
+        for (int slot = 0; slot < 3; slot++) {
+            assertThat(savedP2.get(slot).getPlayerId()).isEqualTo(player2Id);
+            assertThat(savedP2.get(slot).getUnitType()).isEqualTo(expectedP2.get(slot));
+        }
     }
 
     @Test
@@ -127,39 +124,24 @@ class ShopServiceTest {
     }
 
     @Test
-    void replaceOffers_updatesExistingRows() {
-        List<String> types = ShopGenerator.generateOfferTypes(gameId, 1, playerId, 1);
-        for (int slot = 0; slot < 3; slot++) {
-            ShopOffer existing = new ShopOffer(roundId, playerId, slot, "Squire");
-            when(shopOfferRepository.findByRoundIdAndPlayerIdAndSlot(roundId, playerId, slot))
-                    .thenReturn(Optional.of(existing));
-            when(shopOfferRepository.save(existing)).thenReturn(existing);
-        }
+    void persistOffers_missingSlot_throws() {
+        List<String> types = ShopGenerator.generateOfferTypes(gameId, 1, playerId, 0);
+        when(shopOfferRepository.findByRoundIdAndPlayerIdAndSlot(eq(roundId), eq(playerId), anyInt()))
+                .thenReturn(Optional.empty());
 
-        shopService.replaceOffers(roundId, gameId, 1, playerId, 1);
-
-        for (int slot = 0; slot < 3; slot++) {
-            verify(shopOfferRepository).findByRoundIdAndPlayerIdAndSlot(roundId, playerId, slot);
-        }
-        ArgumentCaptor<ShopOffer> saved = ArgumentCaptor.forClass(ShopOffer.class);
-        verify(shopOfferRepository, times(3)).save(saved.capture());
-        assertThat(saved.getAllValues())
-                .extracting(ShopOffer::getUnitType)
-                .containsExactlyElementsOf(types);
+        assertThatThrownBy(() -> shopService.persistOffers(roundId, playerId, types))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("shop offer not found");
     }
 
     @Test
-    void replaceOffers_createsMissingSlots() {
-        when(shopOfferRepository.findByRoundIdAndPlayerIdAndSlot(eq(roundId), eq(playerId), anyInt()))
-                .thenReturn(Optional.empty());
-        when(shopOfferRepository.save(any(ShopOffer.class))).thenAnswer(inv -> inv.getArgument(0));
+    void loadShop_wrongSlotCount_throws() {
+        when(shopOfferRepository.findByRoundIdAndPlayerIdOrderBySlotAsc(roundId, playerId))
+                .thenReturn(List.of(new ShopOffer(roundId, playerId, 0, "Mage")));
 
-        shopService.replaceOffers(roundId, gameId, 1, playerId, 0);
-
-        ArgumentCaptor<ShopOffer> saved = ArgumentCaptor.forClass(ShopOffer.class);
-        verify(shopOfferRepository, times(3)).save(saved.capture());
-        assertThat(saved.getAllValues()).extracting(ShopOffer::getSlot).containsExactly(0, 1, 2);
-        assertThat(saved.getAllValues()).allMatch(o -> o.getUnitType() != null);
+        assertThatThrownBy(() -> shopService.loadShop(roundId, playerId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("expected 3 shop slots");
     }
 
     @Test
@@ -175,22 +157,5 @@ class ShopServiceTest {
         assertThat(shop.get(0)).isEqualTo("Mage");
         assertThat(shop.isEmpty(1)).isTrue();
         assertThat(shop.get(2)).isEqualTo("Ranger");
-    }
-
-    @Test
-    void toDtos_includesSoldSlotsWithNullTypeAndZeroCost() {
-        List<ShopOffer> offers = List.of(
-                new ShopOffer(roundId, playerId, 0, "Squire"),
-                new ShopOffer(roundId, playerId, 1, null),
-                new ShopOffer(roundId, playerId, 2, "Mage"));
-
-        List<ShopSlotDto> dtos = shopService.toDtos(offers);
-
-        assertThat(dtos).hasSize(3);
-        assertThat(dtos.get(0)).isEqualTo(
-                new ShopSlotDto(0, "Squire", UnitTypeResolver.resolve("Squire").getCost()));
-        assertThat(dtos.get(1)).isEqualTo(new ShopSlotDto(1, null, 0));
-        assertThat(dtos.get(2)).isEqualTo(
-                new ShopSlotDto(2, "Mage", UnitTypeResolver.resolve("Mage").getCost()));
     }
 }

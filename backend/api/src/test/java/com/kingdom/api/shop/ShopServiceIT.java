@@ -11,9 +11,9 @@ import com.kingdom.api.service.ShopService;
 import com.kingdom.api.support.AbstractPostgresIT;
 import com.kingdom.api.support.TestAuthSupport;
 import com.kingdom.engine.planning.PlanningShop;
+import com.kingdom.engine.planning.ShopGenerator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -23,7 +23,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -46,7 +45,7 @@ class ShopServiceIT extends AbstractPostgresIT {
 
     @Test
     void joinCreatesSixNonNullOffers() throws Exception {
-        JoinedGame game = joinTwoPlayers();
+        LocalGame game = joinTwoPlayers();
 
         List<ShopOffer> alice = shopOfferRepository
                 .findByRoundIdAndPlayerIdOrderBySlotAsc(game.roundId(), game.aliceId());
@@ -61,7 +60,7 @@ class ShopServiceIT extends AbstractPostgresIT {
 
     @Test
     void consumeOffer_nullsOnlyThatSlot() throws Exception {
-        JoinedGame game = joinTwoPlayers();
+        LocalGame game = joinTwoPlayers();
 
         List<ShopOffer> before = shopOfferRepository
                 .findByRoundIdAndPlayerIdOrderBySlotAsc(game.roundId(), game.aliceId());
@@ -78,8 +77,8 @@ class ShopServiceIT extends AbstractPostgresIT {
     }
 
     @Test
-    void replaceOffers_updatesInPlaceWithoutDuplicateRows() throws Exception {
-        JoinedGame game = joinTwoPlayers();
+    void persistOffers_updatesInPlaceWithoutDuplicateRows() throws Exception {
+        LocalGame game = joinTwoPlayers();
 
         List<String> before = shopOfferRepository
                 .findByRoundIdAndPlayerIdOrderBySlotAsc(game.roundId(), game.aliceId())
@@ -87,20 +86,22 @@ class ShopServiceIT extends AbstractPostgresIT {
                 .map(ShopOffer::getUnitType)
                 .toList();
 
-        shopService.replaceOffers(game.roundId(), game.gameId(), 1, game.aliceId(), 1);
+        List<String> refreshed = ShopGenerator.generateOfferTypes(
+                game.gameId(), 1, game.aliceId(), 1);
+        shopService.persistOffers(game.roundId(), game.aliceId(), refreshed);
 
         List<ShopOffer> afterRows = shopOfferRepository
                 .findByRoundIdAndPlayerIdOrderBySlotAsc(game.roundId(), game.aliceId());
         List<String> after = afterRows.stream().map(ShopOffer::getUnitType).toList();
 
         assertThat(afterRows).hasSize(PlanningShop.SLOT_COUNT);
-        assertThat(after).doesNotContainNull();
+        assertThat(after).containsExactlyElementsOf(refreshed);
         assertThat(after).isNotEqualTo(before);
     }
 
     @Test
     void getState_showsOnlyViewerOffers() throws Exception {
-        JoinedGame game = joinTwoPlayers();
+        LocalGame game = joinTwoPlayers();
 
         List<String> aliceTypes = shopOfferRepository
                 .findByRoundIdAndPlayerIdOrderBySlotAsc(game.roundId(), game.aliceId())
@@ -129,45 +130,19 @@ class ShopServiceIT extends AbstractPostgresIT {
         }
     }
 
-    private JoinedGame joinTwoPlayers() throws Exception {
-        MvcResult aliceReg = mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"username":"shop_alice","email":"shop_alice@test.com","password":"password123"}
-                                """))
-                .andExpect(status().isCreated())
-                .andReturn();
-        String aliceBody = aliceReg.getResponse().getContentAsString();
-        String aliceToken = TestAuthSupport.extractJsonField(aliceBody, "token");
-        UUID aliceId = UUID.fromString(TestAuthSupport.extractJsonField(aliceBody, "userId"));
-
-        MvcResult bobReg = mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"username":"shop_bob","email":"shop_bob@test.com","password":"password123"}
-                                """))
-                .andExpect(status().isCreated())
-                .andReturn();
-        String bobBody = bobReg.getResponse().getContentAsString();
-        String bobToken = TestAuthSupport.extractJsonField(bobBody, "token");
-        UUID bobId = UUID.fromString(TestAuthSupport.extractJsonField(bobBody, "userId"));
-
-        String gameId = TestAuthSupport.createGame(mockMvc, aliceToken);
-        mockMvc.perform(post("/api/games/" + gameId + "/join")
-                        .header("Authorization", "Bearer " + bobToken))
-                .andExpect(status().isOk());
-
-        UUID gameUuid = UUID.fromString(gameId);
-        Round round = roundRepository.findByGameIdAndRoundNumber(gameUuid, 1).orElseThrow();
-        return new JoinedGame(gameUuid, round.getId(), aliceId, bobId, aliceToken, bobToken);
-    }
-
-    private record JoinedGame(
+    private record LocalGame(
             UUID gameId,
             UUID roundId,
             UUID aliceId,
             UUID bobId,
             String aliceToken,
             String bobToken) {
+    }
+
+    private LocalGame joinTwoPlayers() throws Exception {
+        TestAuthSupport.JoinedGame game = TestAuthSupport.joinTwoPlayers(mockMvc, "shop");
+        UUID gameUuid = UUID.fromString(game.gameId());
+        Round round = roundRepository.findByGameIdAndRoundNumber(gameUuid, 1).orElseThrow();
+        return new LocalGame(gameUuid, round.getId(), game.aliceId(), game.bobId(), game.aliceToken(), game.bobToken());
     }
 }

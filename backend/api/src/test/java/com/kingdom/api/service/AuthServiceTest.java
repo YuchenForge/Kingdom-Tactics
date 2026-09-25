@@ -143,7 +143,7 @@ class AuthServiceTest {
         when(userRepository.existsByEmail("a@test.com")).thenReturn(false);
         when(userRepository.existsByUsername("alice")).thenReturn(false);
         when(userRepository.saveAndFlush(any(User.class)))
-                .thenThrow(new DataIntegrityViolationException("unique_users_email"));
+                .thenThrow(new DataIntegrityViolationException("users_email_key"));
 
         assertThatThrownBy(() -> authService.register(request))
                 .isInstanceOf(DuplicateUserException.class)
@@ -163,5 +163,19 @@ class AuthServiceTest {
                 .isInstanceOf(DuplicateUserException.class)
                 .extracting(ex -> ((DuplicateUserException) ex).getField())
                 .isEqualTo("username");
+    }
+
+    @Test
+    void registerNonUniqueIntegrityViolationIsNotMappedToDuplicate() {
+        RegisterRequest request = new RegisterRequest("alice", "a@test.com", "password123");
+        when(userRepository.existsByEmail("a@test.com")).thenReturn(false);
+        when(userRepository.existsByUsername("alice")).thenReturn(false);
+        when(userRepository.saveAndFlush(any(User.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "ERROR: value too long for type character varying(100)"));
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("value too long");
     }
 }

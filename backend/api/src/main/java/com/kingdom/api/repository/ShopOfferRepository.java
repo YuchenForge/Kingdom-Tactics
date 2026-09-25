@@ -12,6 +12,4 @@ public interface ShopOfferRepository extends JpaRepository<ShopOffer, UUID> {
     List<ShopOffer> findByRoundIdAndPlayerIdOrderBySlotAsc(UUID roundId, UUID playerId);
 
     Optional<ShopOffer> findByRoundIdAndPlayerIdAndSlot(UUID roundId, UUID playerId, int slot);
-
-    void deleteByRoundIdAndPlayerId(UUID roundId, UUID playerId);
 }

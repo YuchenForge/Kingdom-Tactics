@@ -17,6 +17,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +33,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * Command HTTP flows. Uses NOT_SUPPORTED so idempotency recovery REQUIRES_NEW
+ * can see committed setup (production does not paper over uncommitted test TX).
+ */
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
 class CommandServiceIT extends AbstractPostgresIT {
 
     @Autowired
@@ -53,7 +60,7 @@ class CommandServiceIT extends AbstractPostgresIT {
 
     @Test
     void buy_thenIdempotentRetry_sameGold_oneCommandRow() throws Exception {
-        JoinedGame game = joinTwoPlayers("idem");
+        TestAuthSupport.JoinedGame game = TestAuthSupport.joinTwoPlayers(mockMvc, "cmd_idem");
         UUID key = UUID.randomUUID();
         UUID planId = alicePlanId(game);
         int expectedGold = 10 - shopSlotCost(game.gameId(), game.aliceToken(), 0);
@@ -88,7 +95,7 @@ class CommandServiceIT extends AbstractPostgresIT {
 
     @Test
     void buy_missingIdempotencyKey_returns400() throws Exception {
-        JoinedGame game = joinTwoPlayers("nokey");
+        TestAuthSupport.JoinedGame game = TestAuthSupport.joinTwoPlayers(mockMvc, "cmd_nokey");
 
         mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/buy")
                         .header("Authorization", "Bearer " + game.aliceToken())
@@ -99,8 +106,21 @@ class CommandServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void buy_missingShopSlot_returns400() throws Exception {
+        TestAuthSupport.JoinedGame game = TestAuthSupport.joinTwoPlayers(mockMvc, "cmd_noslot");
+
+        mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/buy")
+                        .header("Authorization", "Bearer " + game.aliceToken())
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("VALIDATION_ERROR")));
+    }
+
+    @Test
     void buy_asNonParticipant_returns403() throws Exception {
-        JoinedGame game = joinTwoPlayers("outsider");
+        TestAuthSupport.JoinedGame game = TestAuthSupport.joinTwoPlayers(mockMvc, "cmd_outsider");
         String charlieToken = TestAuthSupport.register(mockMvc, "cmd_charlie", "cmd_charlie@test.com");
 
         mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/buy")
@@ -137,7 +157,7 @@ class CommandServiceIT extends AbstractPostgresIT {
 
     @Test
     void afterOwnLock_buyRejected_opponentStillActs() throws Exception {
-        JoinedGame game = joinTwoPlayers("ownlock");
+        TestAuthSupport.JoinedGame game = TestAuthSupport.joinTwoPlayers(mockMvc, "cmd_ownlock");
 
         mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/lock")
                         .header("Authorization", "Bearer " + game.aliceToken())
@@ -178,7 +198,7 @@ class CommandServiceIT extends AbstractPostgresIT {
 
     @Test
     void planningFlow_relocateLockBoth_thenBuyRejectedAndShopHidden() throws Exception {
-        JoinedGame game = joinTwoPlayers("flow");
+        TestAuthSupport.JoinedGame game = TestAuthSupport.joinTwoPlayers(mockMvc, "cmd_flow");
         int expectedGold = 10 - shopSlotCost(game.gameId(), game.aliceToken(), 0);
 
         MvcResult buyResult = mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/buy")
@@ -279,7 +299,7 @@ class CommandServiceIT extends AbstractPostgresIT {
 
     @Test
     void refresh_costsOneGold_replacesAllShopSlots() throws Exception {
-        JoinedGame game = joinTwoPlayers("refresh");
+        TestAuthSupport.JoinedGame game = TestAuthSupport.joinTwoPlayers(mockMvc, "cmd_refresh");
 
         MvcResult stateBefore = mockMvc.perform(get("/api/games/" + game.gameId() + "/state")
                         .header("Authorization", "Bearer " + game.aliceToken()))
@@ -309,7 +329,7 @@ class CommandServiceIT extends AbstractPostgresIT {
 
     @Test
     void sell_afterBuy_refundsGoldAndRemovesUnitFromLane() throws Exception {
-        JoinedGame game = joinTwoPlayers("sell");
+        TestAuthSupport.JoinedGame game = TestAuthSupport.joinTwoPlayers(mockMvc, "cmd_sell");
         int cost = shopSlotCost(game.gameId(), game.aliceToken(), 0);
 
         MvcResult buyResult = mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/buy")
@@ -338,7 +358,7 @@ class CommandServiceIT extends AbstractPostgresIT {
                 .andExpect(jsonPath("$.lane[0].unitId", nullValue()));
     }
 
-    private UUID alicePlanId(JoinedGame game) {
+    private UUID alicePlanId(TestAuthSupport.JoinedGame game) {
         UUID roundId = roundRepository
                 .findByGameIdAndRoundNumber(UUID.fromString(game.gameId()), 1)
                 .orElseThrow()
@@ -357,44 +377,5 @@ class CommandServiceIT extends AbstractPostgresIT {
                 .andReturn();
         return objectMapper.readTree(state.getResponse().getContentAsString())
                 .path("shop").get(slot).path("cost").asInt();
-    }
-
-    private JoinedGame joinTwoPlayers(String suffix) throws Exception {
-        MvcResult aliceReg = mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"username":"cmd_a_%s","email":"cmd_a_%s@test.com","password":"password123"}
-                                """.formatted(suffix, suffix)))
-                .andExpect(status().isCreated())
-                .andReturn();
-        String aliceBody = aliceReg.getResponse().getContentAsString();
-        String aliceToken = TestAuthSupport.extractJsonField(aliceBody, "token");
-        UUID aliceId = UUID.fromString(TestAuthSupport.extractJsonField(aliceBody, "userId"));
-
-        MvcResult bobReg = mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"username":"cmd_b_%s","email":"cmd_b_%s@test.com","password":"password123"}
-                                """.formatted(suffix, suffix)))
-                .andExpect(status().isCreated())
-                .andReturn();
-        String bobBody = bobReg.getResponse().getContentAsString();
-        String bobToken = TestAuthSupport.extractJsonField(bobBody, "token");
-        UUID bobId = UUID.fromString(TestAuthSupport.extractJsonField(bobBody, "userId"));
-
-        String gameId = TestAuthSupport.createGame(mockMvc, aliceToken);
-        mockMvc.perform(post("/api/games/" + gameId + "/join")
-                        .header("Authorization", "Bearer " + bobToken))
-                .andExpect(status().isOk());
-
-        return new JoinedGame(gameId, aliceId, bobId, aliceToken, bobToken);
-    }
-
-    private record JoinedGame(
-            String gameId,
-            UUID aliceId,
-            UUID bobId,
-            String aliceToken,
-            String bobToken) {
     }
 }

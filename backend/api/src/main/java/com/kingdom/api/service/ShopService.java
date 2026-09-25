@@ -1,10 +1,8 @@
 package com.kingdom.api.service;
 
-import com.kingdom.api.dto.ShopSlotDto;
 import com.kingdom.api.entity.Round;
 import com.kingdom.api.entity.ShopOffer;
 import com.kingdom.api.repository.ShopOfferRepository;
-import com.kingdom.engine.domain.UnitTypeResolver;
 import com.kingdom.engine.planning.PlanningShop;
 import com.kingdom.engine.planning.ShopGenerator;
 import org.springframework.stereotype.Service;
@@ -16,8 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Shop generation and persistence.
- * RNG is pure ShopGenerator; this layer owns JPA rows.
+ * Shop persistence. Offer RNG lives in {@link ShopGenerator}; this layer owns JPA rows.
  */
 @Service
 public class ShopService {
@@ -28,29 +25,7 @@ public class ShopService {
         this.shopOfferRepository = shopOfferRepository;
     }
 
-    /**
-     * Deterministic offer types for a player/round.
-     *
-     * refreshIndex 0 on round start, 1 on first refresh, and so on.
-     */
-    public List<String> generateOfferTypes(
-            UUID gameId, int roundNumber, UUID playerId, int refreshIndex) {
-        return ShopGenerator.generateOfferTypes(gameId, roundNumber, playerId, refreshIndex);
-    }
-
-    /** Opening shop for one player: refreshIndex=0, insert slots 0–2. */
-    @Transactional
-    public void createShopForPlayer(
-            UUID roundId, UUID gameId, int roundNumber, UUID playerId) {
-        List<String> types = generateOfferTypes(gameId, roundNumber, playerId, 0);
-        List<ShopOffer> rows = new ArrayList<>(PlanningShop.SLOT_COUNT);
-        for (int slot = 0; slot < PlanningShop.SLOT_COUNT; slot++) {
-            rows.add(new ShopOffer(roundId, playerId, slot, types.get(slot)));
-        }
-        shopOfferRepository.saveAll(rows);
-    }
-
-    /** Opening shops for both seats of a round. */
+    /** Opening shops for both seats of a round (refreshIndex=0). */
     @Transactional
     public void createShopsForRound(
             Round round, UUID gameId, UUID player1Id, UUID player2Id) {
@@ -58,22 +33,27 @@ public class ShopService {
         createShopForPlayer(round.getId(), gameId, round.getRoundNumber(), player2Id);
     }
 
+    private void createShopForPlayer(
+            UUID roundId, UUID gameId, int roundNumber, UUID playerId) {
+        List<String> types = ShopGenerator.generateOfferTypes(gameId, roundNumber, playerId, 0);
+        List<ShopOffer> rows = new ArrayList<>(PlanningShop.SLOT_COUNT);
+        for (int slot = 0; slot < PlanningShop.SLOT_COUNT; slot++) {
+            rows.add(new ShopOffer(roundId, playerId, slot, types.get(slot)));
+        }
+        shopOfferRepository.saveAll(rows);
+    }
+
     /** Mark a bought slot as sold (unit_type = null). */
     @Transactional
     public void consumeOffer(UUID roundId, UUID playerId, int slot) {
-        ShopOffer offer = shopOfferRepository
-                .findByRoundIdAndPlayerIdAndSlot(roundId, playerId, slot)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "shop offer not found: round=" + roundId
-                                + " player=" + playerId
-                                + " slot=" + slot));
+        ShopOffer offer = requireOffer(roundId, playerId, slot);
         offer.setUnitType(null);
         shopOfferRepository.save(offer);
     }
 
     /**
-     * Write already-rolled offer types to DB (update in place; create missing slots).
-     * Used after a successful Refresh apply so DB matches the applier result.
+     * Update existing offer rows after a successful Refresh apply.
+     * Missing slots are corrupt state — not created here.
      */
     @Transactional
     public void persistOffers(UUID roundId, UUID playerId, List<String> types) {
@@ -82,70 +62,41 @@ public class ShopService {
                     "types must have exactly " + PlanningShop.SLOT_COUNT + " entries");
         }
         for (int slot = 0; slot < PlanningShop.SLOT_COUNT; slot++) {
-            final int slotIndex = slot;
-            ShopOffer offer = shopOfferRepository
-                    .findByRoundIdAndPlayerIdAndSlot(roundId, playerId, slot)
-                    .orElseGet(() -> new ShopOffer(roundId, playerId, slotIndex, null));
+            ShopOffer offer = requireOffer(roundId, playerId, slot);
             offer.setUnitType(types.get(slot));
             shopOfferRepository.save(offer);
         }
     }
 
-    /**
-     * Refresh helper: roll + persist in one call.
-     * CommandService should prefer generateOfferTypes → apply → persistOffers
-     * so the applier sees the same list that gets written.
-     */
-    @Transactional
-    public void replaceOffers(
-            UUID roundId, UUID gameId, int roundNumber, UUID playerId, int refreshIndex) {
-        persistOffers(
-                roundId,
-                playerId,
-                generateOfferTypes(gameId, roundNumber, playerId, refreshIndex));
-    }
-
-    /** Ordered rows → PlanningShop; null type = sold. */
+    /** Ordered rows → PlanningShop; null type = sold. Requires slots 0..2 exactly once. */
     @Transactional(readOnly = true)
     public PlanningShop loadShop(UUID roundId, UUID playerId) {
         List<ShopOffer> rows =
                 shopOfferRepository.findByRoundIdAndPlayerIdOrderBySlotAsc(roundId, playerId);
-        String[] slots = new String[PlanningShop.SLOT_COUNT];
-        for (ShopOffer row : rows) {
-            int slot = row.getSlot();
-            if (slot >= 0 && slot < PlanningShop.SLOT_COUNT) {
-                slots[slot] = row.getUnitType();
-            }
+        if (rows.size() != PlanningShop.SLOT_COUNT) {
+            throw new IllegalStateException(
+                    "expected " + PlanningShop.SLOT_COUNT + " shop slots for round="
+                            + roundId + " player=" + playerId + ", got " + rows.size());
         }
-        return new PlanningShop(Arrays.asList(slots));
+        String[] offers = new String[PlanningShop.SLOT_COUNT];
+        for (int i = 0; i < PlanningShop.SLOT_COUNT; i++) {
+            ShopOffer row = rows.get(i);
+            if (row.getSlot() != i) {
+                throw new IllegalStateException(
+                        "invalid shop slot layout round=" + roundId + " player=" + playerId
+                                + ": expected slot " + i + ", got " + row.getSlot());
+            }
+            offers[i] = row.getUnitType();
+        }
+        return new PlanningShop(Arrays.asList(offers));
     }
 
-    /**
-     * Map persisted offers → API DTOs for GET /state.
-     * Always returns 3 slots; sold slots have unitType=null and cost=0.
-     */
-    public List<ShopSlotDto> toDtos(List<ShopOffer> offers) {
-        String[] types = new String[PlanningShop.SLOT_COUNT];
-        if (offers != null) {
-            for (ShopOffer offer : offers) {
-                int slot = offer.getSlot();
-                if (slot >= 0 && slot < PlanningShop.SLOT_COUNT) {
-                    types[slot] = offer.getUnitType();
-                }
-            }
-        }
-        List<ShopSlotDto> dtos = new ArrayList<>(PlanningShop.SLOT_COUNT);
-        for (int slot = 0; slot < PlanningShop.SLOT_COUNT; slot++) {
-            dtos.add(toDto(slot, types[slot]));
-        }
-        return dtos;
-    }
-
-    private static ShopSlotDto toDto(int slot, String unitType) {
-        if (unitType == null) {
-            return new ShopSlotDto(slot, null, 0);
-        }
-        int cost = UnitTypeResolver.resolve(unitType).getCost();
-        return new ShopSlotDto(slot, unitType, cost);
+    private ShopOffer requireOffer(UUID roundId, UUID playerId, int slot) {
+        return shopOfferRepository
+                .findByRoundIdAndPlayerIdAndSlot(roundId, playerId, slot)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "shop offer not found: round=" + roundId
+                                + " player=" + playerId
+                                + " slot=" + slot));
     }
 }

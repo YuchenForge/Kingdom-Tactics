@@ -3,9 +3,10 @@ package com.kingdom.api.dto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * JSON body returned by every planning command (buy, sell, refresh, relocate, lock) 
+ * JSON body returned by every planning command (buy, sell, refresh, relocate, lock)
  * including when the same Idempotency-Key is retried.
  */
 
@@ -16,6 +17,7 @@ public record CommandResponse(
         int gold,
         List<LaneSlotDto> lane,
         List<List<String>> board,
+        Map<String, UnitViewDto> units,
         List<ShopSlotDto> shop,
         boolean isLocked,
         Boolean opponentIsLocked,
@@ -28,9 +30,10 @@ public record CommandResponse(
             int gold,
             List<LaneSlotDto> lane,
             List<List<String>> board,
+            Map<String, UnitViewDto> units,
             List<ShopSlotDto> shop,
             boolean isLocked) {
-        return new CommandResponse(true, gold, lane, board, shop, isLocked, null, null, null);
+        return new CommandResponse(true, gold, lane, board, units, shop, isLocked, null, null, null);
     }
 
     // lock endpoint
@@ -38,6 +41,7 @@ public record CommandResponse(
             int gold,
             List<LaneSlotDto> lane,
             List<List<String>> board,
+            Map<String, UnitViewDto> units,
             List<ShopSlotDto> shop,
             boolean opponentIsLocked,
             String message,
@@ -47,6 +51,7 @@ public record CommandResponse(
                 gold,
                 lane,
                 board,
+                units,
                 shop,
                 true,
                 opponentIsLocked,

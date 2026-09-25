@@ -3,6 +3,7 @@ package com.kingdom.api.service;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -11,6 +12,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
 import org.mockito.Mock;
@@ -47,7 +50,7 @@ import com.kingdom.engine.planning.PlanningError;
 import com.kingdom.engine.planning.PlanningShop;
 
 @ExtendWith(MockitoExtension.class)
-class CommandServiceImplTest {
+class CommandServiceTest {
 
     // Mock dependencies
     @Mock
@@ -69,7 +72,7 @@ class CommandServiceImplTest {
     @Mock
     private TransactionStatus transactionStatus;
 
-    private CommandServiceImpl commandService;
+    private CommandService commandService;
 
     // Test data: stable ids for testing
     private final UUID gameId = UUID.randomUUID();
@@ -90,7 +93,7 @@ class CommandServiceImplTest {
         lenient().when(planningDeadlineService.enforceDeadlineOrAutoLock(any(), any()))
                 .thenReturn(false);
 
-        commandService = new CommandServiceImpl(
+        commandService = new CommandService(
                 gameService,
                 gameRepository,
                 roundRepository,
@@ -137,7 +140,7 @@ class CommandServiceImplTest {
 
         ArgumentCaptor<Command> commandCaptor = ArgumentCaptor.forClass(Command.class);
         verify(commandRepository).saveAndFlush(commandCaptor.capture());
-        assertThat(commandCaptor.getValue().getCommandType()).isEqualTo(CommandServiceImpl.TYPE_BUY);
+        assertThat(commandCaptor.getValue().getCommandType()).isEqualTo(CommandService.TYPE_BUY);
         assertThat(commandCaptor.getValue().getIdempotencyKey()).isEqualTo(key);
         assertThat(commandCaptor.getValue().getSequenceNumber()).isZero();
     }
@@ -166,9 +169,14 @@ class CommandServiceImplTest {
         when(commandRepository.countByRoundPlanId(planId)).thenReturn(0);
         when(commandRepository.saveAndFlush(any(Command.class)))
                 .thenThrow(new DataIntegrityViolationException(
-                        "commands_round_plan_id_idempotency_key_key"));
+                        "ERROR: duplicate key value violates unique constraint "
+                                + "\"commands_round_plan_id_idempotency_key_key\""));
+        // Recovery TX confirms the winner's row, then returns snapshot.
+        when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(new Command(
+                        planId, 0, CommandService.TYPE_BUY, Map.of("shopSlot", 0), key)));
 
-        // UNIQUE race: winner committed; loser reloads and returns the snapshot (not 409).
         CommandResponse response = commandService.buy(gameId, 1, aliceId, key, 0);
 
         assertThat(response.success()).isTrue();
@@ -176,32 +184,73 @@ class CommandServiceImplTest {
     }
 
     @Test
-    void buy_idempotentRetry_doesNotReapply() {
-        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
-        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
-        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
-        when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
-                .thenReturn(Optional.of(new Command(planId, 0, CommandServiceImpl.TYPE_BUY, null, key)));
+    void buy_unrelatedIntegrityViolation_propagates() {
+        stubHappyPath();
         when(shopService.loadShop(roundId, aliceId))
                 .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+        when(roundPlanRepository.saveAndFlush(any(RoundPlan.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(commandRepository.countByRoundPlanId(planId)).thenReturn(0);
+        when(commandRepository.saveAndFlush(any(Command.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "ERROR: duplicate key value violates unique constraint "
+                                + "\"commands_round_plan_id_sequence_number_key\""));
 
-        CommandResponse response = commandService.buy(gameId, 1, aliceId, key, 0);
-
-        assertThat(response.gold()).isEqualTo(10);
-        verify(shopService, never()).consumeOffer(any(), any(), any(Integer.class));
-        verify(commandRepository, never()).saveAndFlush(any());
-        verify(roundPlanRepository, never()).saveAndFlush(any());
+        assertThatThrownBy(() -> commandService.buy(gameId, 1, aliceId, key, 0))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("sequence_number");
     }
 
     @Test
-    void buy_idempotentRetry_whenGameLocked_returnsSnapshot() {
-        game.setState(GameStates.LOCKED);
-        round.setState(GameStates.LOCKED);
+    void buy_idempotencyConstraint_withoutCommittedKey_propagates() {
+        stubHappyPath();
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+        when(roundPlanRepository.saveAndFlush(any(RoundPlan.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(commandRepository.countByRoundPlanId(planId)).thenReturn(0);
+        when(commandRepository.saveAndFlush(any(Command.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "commands_round_plan_id_idempotency_key_key"));
+        // Constraint name matches, but key never landed — do not invent success.
+        when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> commandService.buy(gameId, 1, aliceId, key, 0))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void buy_optimisticLock_whenKeyCommitted_returnsSnapshot() {
+        stubHappyPath();
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+        when(roundPlanRepository.saveAndFlush(any(RoundPlan.class)))
+                .thenThrow(new OptimisticLockingFailureException("stale version"));
+        when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(new Command(
+                        planId, 0, CommandService.TYPE_BUY, Map.of("shopSlot", 0), key)));
+
+        CommandResponse response = commandService.buy(gameId, 1, aliceId, key, 0);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.gold()).isEqualTo(9);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "PREPARATION, PREPARATION",
+            "LOCKED, LOCKED"
+    })
+    void buy_idempotentRetry_doesNotReapply(String gameState, String roundState) {
+        game.setState(gameState);
+        round.setState(roundState);
         when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
         when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
         when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
         when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
-                .thenReturn(Optional.of(new Command(planId, 0, CommandServiceImpl.TYPE_BUY, null, key)));
+                .thenReturn(Optional.of(new Command(planId, 0, CommandService.TYPE_BUY, null, key)));
         when(shopService.loadShop(roundId, aliceId))
                 .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
 
@@ -210,6 +259,8 @@ class CommandServiceImplTest {
         assertThat(response.success()).isTrue();
         assertThat(response.gold()).isEqualTo(10);
         verify(shopService, never()).consumeOffer(any(), any(), any(Integer.class));
+        verify(commandRepository, never()).saveAndFlush(any());
+        verify(roundPlanRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -232,21 +283,56 @@ class CommandServiceImplTest {
     }
 
     @Test
-    void buy_pastDeadline_idempotentRetry_returnsSnapshot() {
+    void buy_pastDeadline_idempotentRetry_returnsLockedSnapshot() {
+        RoundPlan lockedPlan = new RoundPlan(roundId, aliceId, 9);
+        ReflectionTestUtils.setField(lockedPlan, "id", planId);
+        lockedPlan.setLocked(true);
+
         when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
         when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
-        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId)).thenReturn(Optional.of(plan));
+        // Initial load is unlocked; refresh + committed snapshot see the deadline lock.
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId))
+                .thenReturn(Optional.of(plan))
+                .thenReturn(Optional.of(lockedPlan));
         when(planningDeadlineService.enforceDeadlineOrAutoLock(game, round)).thenReturn(true);
         when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
-                .thenReturn(Optional.of(new Command(planId, 0, CommandServiceImpl.TYPE_BUY, null, key)));
+                .thenReturn(Optional.of(new Command(planId, 0, CommandService.TYPE_BUY, null, key)));
         when(shopService.loadShop(roundId, aliceId))
-                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger"));
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger").withSlotSold(0));
 
         CommandResponse response = commandService.buy(gameId, 1, aliceId, key, 0);
 
         assertThat(response.success()).isTrue();
-        assertThat(response.gold()).isEqualTo(10);
+        assertThat(response.gold()).isEqualTo(9);
+        assertThat(response.isLocked()).isTrue();
         verify(shopService, never()).consumeOffer(any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void buy_emptyShopAfterConcurrentIdempotentCommit_returnsSnapshot() {
+        RoundPlan committedPlan = new RoundPlan(roundId, aliceId, 9);
+        ReflectionTestUtils.setField(committedPlan, "id", planId);
+        Command committed = new Command(
+                planId, 0, CommandService.TYPE_BUY, Map.of("shopSlot", 0), key);
+
+        when(gameRepository.findById(gameId)).thenReturn(Optional.of(game));
+        when(roundRepository.findByGameIdAndRoundNumber(gameId, 1)).thenReturn(Optional.of(round));
+        when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, aliceId))
+                .thenReturn(Optional.of(plan))
+                .thenReturn(Optional.of(committedPlan));
+        // Miss on first lookup; recovery sees the winner's row.
+        when(commandRepository.findByRoundPlanIdAndIdempotencyKey(planId, key))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(committed));
+        when(shopService.loadShop(roundId, aliceId))
+                .thenReturn(PlanningShop.of("Squire", "Mage", "Ranger").withSlotSold(0));
+
+        CommandResponse response = commandService.buy(gameId, 1, aliceId, key, 0);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.gold()).isEqualTo(9);
+        verify(shopService, never()).consumeOffer(any(), any(), any(Integer.class));
+        verify(commandRepository, never()).saveAndFlush(any());
     }
 
     @Test

@@ -2,10 +2,9 @@ package com.kingdom.api.mapper;
 
 import com.kingdom.api.dto.CommandResponse;
 import com.kingdom.api.dto.LaneSlotDto;
-import com.kingdom.api.dto.ShopSlotDto;
+import com.kingdom.api.dto.UnitViewDto;
 import com.kingdom.api.entity.RoundPlan;
 import com.kingdom.engine.domain.Board;
-import com.kingdom.engine.domain.HoldingLane;
 import com.kingdom.engine.domain.UnitTypeResolver;
 import com.kingdom.engine.planning.PlanningShop;
 import com.kingdom.engine.planning.PlanningState;
@@ -60,7 +59,7 @@ class PlanningStateMapperTest {
         assertThat(plan.getGold()).isEqualTo(10);
         assertThat(plan.isLocked()).isFalse();
         assertThat(plan.getBoardState()).isEmpty();
-        assertThat(plan.getLaneUnits()).hasSize(HoldingLane.SIZE);
+        assertThat(plan.getLaneUnits()).hasSize(PlanningState.LANE_SIZE);
         assertThat(plan.getLaneUnits()).containsOnlyNulls();
 
         PlanningState reloaded = PlanningStateMapper.toPlanningState(plan, shop, 1);
@@ -75,7 +74,7 @@ class PlanningStateMapperTest {
 
         PlanningUnit laneUnit = new PlanningUnit("lane-1", "Squire", 2);
         PlanningUnit boardUnit = new PlanningUnit("board-1", "Mage", 3);
-        PlanningUnit[] lane = new PlanningUnit[HoldingLane.SIZE];
+        PlanningUnit[] lane = new PlanningUnit[PlanningState.LANE_SIZE];
         lane[2] = laneUnit;
         PlanningUnit[][] board = new PlanningUnit[Board.WIDTH][Board.HEIGHT];
         board[1][3] = boardUnit;
@@ -96,12 +95,13 @@ class PlanningStateMapperTest {
     }
 
     @Test
-    void toSnapshotResponseMapsLaneBoardAndShop() {
+    void toSnapshotResponseMapsLaneBoardUnitsAndShopStats() {
         PlanningShop shop = PlanningShop.of("Squire", "Mage", "Ranger").withSlotSold(1);
-        PlanningUnit[] lane = new PlanningUnit[HoldingLane.SIZE];
+        PlanningUnit[] lane = new PlanningUnit[PlanningState.LANE_SIZE];
         lane[0] = new PlanningUnit("u1", "Knight", 1);
         PlanningUnit[][] board = new PlanningUnit[Board.WIDTH][Board.HEIGHT];
         board[0][2] = new PlanningUnit("u2", "Mage", 1);
+        board[1][0] = new PlanningUnit("u3", "Squire", 2);
 
         PlanningState state = new PlanningState(8, true, shop, lane, board, 1);
         CommandResponse response = PlanningStateMapper.toSnapshotResponse(state);
@@ -113,10 +113,33 @@ class PlanningStateMapperTest {
                 .isEqualTo(new LaneSlotDto(0, "u1", "Knight", 1));
         assertThat(response.lane().get(1).unitId()).isNull();
         assertThat(response.board().get(2).get(0)).isEqualTo("u2");
+        assertThat(response.board().get(0).get(1)).isEqualTo("u3");
+
+        var squire = UnitTypeResolver.resolve("Squire");
+        var mage = UnitTypeResolver.resolve("Mage");
+        var ranger = UnitTypeResolver.resolve("Ranger");
+        var knight = UnitTypeResolver.resolve("Knight");
         assertThat(response.shop()).containsExactly(
-                new ShopSlotDto(0, "Squire", UnitTypeResolver.resolve("Squire").getCost()),
-                new ShopSlotDto(1, null, 0),
-                new ShopSlotDto(2, "Ranger", UnitTypeResolver.resolve("Ranger").getCost()));
+                PlanningStateMapper.toShopDto(0, "Squire"),
+                PlanningStateMapper.toShopDto(1, null),
+                PlanningStateMapper.toShopDto(2, "Ranger"));
+        assertThat(response.shop().get(0).maxHp()).isEqualTo(squire.getMaxHp(1));
+        assertThat(response.shop().get(0).attack()).isEqualTo(squire.getAttack(1));
+        assertThat(response.shop().get(1).unitType()).isNull();
+        assertThat(response.shop().get(2).range()).isEqualTo(ranger.getRange());
+
+        assertThat(response.units()).containsOnlyKeys("u2", "u3", "u1");
+        assertThat(response.units().get("u3")).isEqualTo(new UnitViewDto(
+                "u3",
+                "Squire",
+                2,
+                squire.getMaxHp(2),
+                squire.getAttack(2),
+                squire.getRange(),
+                squire.getSpecialAbility(),
+                squire.getHealAmount(2)));
+        assertThat(response.units().get("u1").maxHp()).isEqualTo(knight.getMaxHp(1));
+        assertThat(response.units().get("u2").maxHp()).isEqualTo(mage.getMaxHp(1));
         assertThat(response.opponentIsLocked()).isNull();
     }
 
@@ -131,14 +154,27 @@ class PlanningStateMapperTest {
     }
 
     @Test
-    void parseLaneAcceptsShortListAndPads() {
+    void parseLaneRejectsWrongSize() {
         List<Object> shortLane = new ArrayList<>();
         shortLane.add(Map.of("id", "u", "type", "Squire", "level", 1));
 
-        PlanningUnit[] lane = PlanningStateMapper.parseLane(shortLane);
-        assertThat(lane).hasSize(HoldingLane.SIZE);
-        assertThat(lane[0].getId()).isEqualTo("u");
-        assertThat(Arrays.copyOfRange(lane, 1, HoldingLane.SIZE)).containsOnlyNulls();
+        assertThatThrownBy(() -> PlanningStateMapper.parseLane(shortLane))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("exactly " + PlanningState.LANE_SIZE);
+
+        assertThatThrownBy(() -> PlanningStateMapper.parseLane(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("exactly " + PlanningState.LANE_SIZE);
+    }
+
+    @Test
+    void parseBoardRejectsMalformedCoordinateKey() {
+        Map<String, Object> boardState = new HashMap<>();
+        boardState.put("1-0", Map.of("id", "u", "type", "Squire", "level", 1));
+
+        assertThatThrownBy(() -> PlanningStateMapper.parseBoard(boardState))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("x,y");
     }
 
     private static RoundPlan emptyJoinPlan(int gold) {
