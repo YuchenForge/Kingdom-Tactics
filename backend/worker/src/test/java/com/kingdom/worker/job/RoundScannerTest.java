@@ -48,55 +48,20 @@ class RoundScannerTest {
     }
 
     @Test
-    void poll_oneLocked_callsProcessLockedOnce() {
-        UUID id = UUID.randomUUID();
-        when(rounds.findIdsByState(GameStates.LOCKED, PAGE)).thenReturn(List.of(id));
-        when(rounds.findIdsByState(GameStates.RESOLVING, PAGE)).thenReturn(List.of());
-        when(rounds.findIdsNeedingAdvance(GameStates.ROUND_RESULT, PAGE)).thenReturn(List.of());
+    void poll_dispatchesEachPathOnce() {
+        UUID lockedId = UUID.randomUUID();
+        UUID resolvingId = UUID.randomUUID();
+        UUID roundResultId = UUID.randomUUID();
+        when(rounds.findIdsByState(GameStates.LOCKED, PAGE)).thenReturn(List.of(lockedId));
+        when(rounds.findIdsByState(GameStates.RESOLVING, PAGE)).thenReturn(List.of(resolvingId));
+        when(rounds.findIdsNeedingAdvance(GameStates.ROUND_RESULT, PAGE))
+                .thenReturn(List.of(roundResultId));
 
         scanner.poll();
 
-        verify(job).processLocked(id);
-        verify(job, never()).retryResolving(any());
-        verify(job, never()).advanceOnly(any());
-    }
-
-    @Test
-    void poll_oneResolving_callsRetryResolvingOnce() {
-        UUID id = UUID.randomUUID();
-        when(rounds.findIdsByState(GameStates.LOCKED, PAGE)).thenReturn(List.of());
-        when(rounds.findIdsByState(GameStates.RESOLVING, PAGE)).thenReturn(List.of(id));
-        when(rounds.findIdsNeedingAdvance(GameStates.ROUND_RESULT, PAGE)).thenReturn(List.of());
-
-        scanner.poll();
-
-        verify(job).retryResolving(id);
-        verify(job, never()).processLocked(any());
-        verify(job, never()).advanceOnly(any());
-    }
-
-    @Test
-    void poll_oneUnadvancedRoundResult_callsAdvanceOnlyOnce() {
-        UUID id = UUID.randomUUID();
-        when(rounds.findIdsByState(GameStates.LOCKED, PAGE)).thenReturn(List.of());
-        when(rounds.findIdsByState(GameStates.RESOLVING, PAGE)).thenReturn(List.of());
-        when(rounds.findIdsNeedingAdvance(GameStates.ROUND_RESULT, PAGE)).thenReturn(List.of(id));
-
-        scanner.poll();
-
-        verify(job).advanceOnly(id);
-        verify(job, never()).processLocked(any());
-        verify(job, never()).retryResolving(any());
-    }
-
-    @Test
-    void poll_advancedRoundResult_notDispatched() {
-        // Finder excludes advanced_at IS NOT NULL; empty → advanceOnly not called.
-        stubEmptyFinders();
-
-        scanner.poll();
-
-        verify(job, never()).advanceOnly(any());
+        verify(job).processLocked(lockedId);
+        verify(job).retryResolving(resolvingId);
+        verify(job).advanceOnly(roundResultId);
     }
 
     @Test

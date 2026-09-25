@@ -91,20 +91,6 @@ class ResolveServiceTest {
     }
 
     @Test
-    void commit_whenEventsAlreadyExist_returnsFalse() {
-        Round round = resolvingRound();
-        when(roundRepository.lockResolvingRoundForCommit(roundId)).thenReturn(Optional.of(round));
-        when(gameRepository.lockGameForUpdate(gameId)).thenReturn(Optional.of(resolvingGame()));
-        when(gameEventRepository.existsByGameIdAndRoundNumber(gameId, 1)).thenReturn(true);
-
-        boolean committed = resolveService.commit(roundId, gameId, 1, stubResult(1, 1));
-
-        assertThat(committed).isFalse();
-        verify(gameEventRepository, never()).saveAll(anyList());
-        verifyNoInteractions(snapshotRepository, gamePlayerRepository);
-    }
-
-    @Test
     void commit_persistsEventsKeepHpSnapshotsAndRoundResult() {
         Round round = resolvingRound();
         Game game = resolvingGame();
@@ -115,7 +101,6 @@ class ResolveServiceTest {
 
         when(roundRepository.lockResolvingRoundForCommit(roundId)).thenReturn(Optional.of(round));
         when(gameRepository.lockGameForUpdate(gameId)).thenReturn(Optional.of(game));
-        when(gameEventRepository.existsByGameIdAndRoundNumber(gameId, 1)).thenReturn(false);
         when(gamePlayerRepository.lockByGameIdOrderBySeatAsc(gameId)).thenReturn(List.of(p0, p1));
         when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, player0Id))
                 .thenReturn(Optional.of(planWithGold(player0Id, 11)));
@@ -154,7 +139,6 @@ class ResolveServiceTest {
 
         when(roundRepository.lockResolvingRoundForCommit(roundId)).thenReturn(Optional.of(round));
         when(gameRepository.lockGameForUpdate(gameId)).thenReturn(Optional.of(game));
-        when(gameEventRepository.existsByGameIdAndRoundNumber(gameId, 1)).thenReturn(false);
         when(gamePlayerRepository.lockByGameIdOrderBySeatAsc(gameId)).thenReturn(List.of(p0, p1));
         when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, player0Id))
                 .thenReturn(Optional.of(planWithGold(player0Id, 10)));

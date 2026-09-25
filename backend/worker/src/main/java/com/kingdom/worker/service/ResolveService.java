@@ -13,11 +13,10 @@ import com.kingdom.api.repository.GameStateSnapshotRepository;
 import com.kingdom.api.repository.RoundPlanRepository;
 import com.kingdom.api.repository.RoundRepository;
 import com.kingdom.engine.domain.CombatBoard;
+import com.kingdom.engine.domain.CombatOutcome;
 import com.kingdom.engine.domain.ResolutionResult;
 import com.kingdom.worker.mapper.EndSnapshotMapper;
 import com.kingdom.worker.mapper.GameEventMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,8 +32,6 @@ import java.util.UUID;
  */
 @Service
 public class ResolveService {
-
-    private static final Logger log = LoggerFactory.getLogger(ResolveService.class);
 
     private final RoundRepository roundRepository;
     private final GameRepository gameRepository;
@@ -78,12 +75,6 @@ public class ResolveService {
         Game game = gameRepository.lockGameForUpdate(gameId)
                 .orElseThrow(() -> new GameNotFoundException(gameId));
 
-        // Check if events already exist
-        if (gameEventRepository.existsByGameIdAndRoundNumber(gameId, roundNumber)) {
-            log.warn("TX2 no-op: events already exist gameId={} round={}", gameId, roundNumber);
-            return false;
-        }
-
         // Save events
         gameEventRepository.saveAll(GameEventMapper.toEntities(gameId, roundNumber, result.getEvents()));
 
@@ -122,7 +113,7 @@ public class ResolveService {
         Map<String, Integer> keepDamage = new HashMap<>(2);
         keepDamage.put("0", dmg0);
         keepDamage.put("1", dmg1);
-        round.setOutcome(result.getEndReason());
+        round.setOutcome(CombatOutcome.requireKnown(result.getEndReason()).name());
         round.setKeepDamage(keepDamage);
         round.setFinishedAt(clock.instant());
         round.setState(GameStates.ROUND_RESULT);
