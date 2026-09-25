@@ -231,7 +231,7 @@ Two players can independently build legal boards through API calls. Planning pha
 
 ## Phase 4: Worker and round resolution
 
-**Status:** Planned (after Phase 3)
+**Status:** ✅ Complete (optional full 8-round IT deferred; Compose worker shipped; backend GitHub Actions CI shipped; full Compose stack → Phase 7)
 
 **Goal:** Resolve rounds reliably and commit each round’s resolution effects once (no duplicate events / Keep damage).
 
@@ -268,15 +268,25 @@ Two players can independently build legal boards through API calls. Planning pha
 
 ### Tests
 
-- Two workers cannot **commit** resolution effects twice for the same round (`SKIP LOCKED` + TX 2 state guard); engine recompute on `RESOLVING` is allowed
-- Crash after claim (`RESOLVING`) or after `ROUND_RESULT` recovers without duplicate events / Keep damage / advancement
-- Empty plan works (0 units → immediate loss / mutual wipe)
-- Replay validation (plans + seed → engine, same rules version)
-- Full 8-round match; round 2+ shops are fresh
+| Checklist | Status | Where |
+|---|---|---|
+| Unit quartet (PlanBoardFactory, CombatSeedGenerator, MatchEndDecision, 1-based sequences) | ✅ | `PlanBoardFactoryTest`, `CombatSeedGeneratorTest`, `MatchEndDecisionTest`, `GameEventMapperTest` |
+| Core TX ITs (claim / resolve / advance concurrency + idempotency) | ✅ | `ClaimServiceIT`, `ResolveServiceIT`, `MatchAdvancementServiceIT`, `RoundResolutionJobIT` |
+| API read surface (events / round result / match result / state) | ✅ | `GameResultIT`, `GameResultServiceTest` |
+| Crash after TX1 → path 2 (`retryResolving`) | ✅ | `RoundResolutionJobIT.retryResolving_recoversAfterCrashBetweenTx1AndTx2` |
+| Crash after TX2 → path 3 (`advanceOnly`) | ✅ | `RoundResolutionJobIT.advanceOnly_recoversUnadvancedRoundResult` |
+| Empty / mutual wipe | ✅ | `ResolutionServiceTest.resolve_emptyVsEmpty_isMutualWipeDraw` |
+| Replay validation (plans + seed → engine ≈ TX2) | ✅ | `RoundResolutionJobIT.afterTx2_replayingPlansAndSeed_matchesPersistedOutcomeAndSurvivors` |
+| Full 8-round match (DoD) | ⬜ | Optional / deferred — decision matrix + FINISH/draw ITs cover rules |
+| Backend CI (`mvn -B test`, JDK 21, Testcontainers) | ✅ | `.github/workflows/backend.yml` |
+
+Also present: `ClaimServiceTest`, `ResolveServiceTest` (incl. Keep HP clamp), `MatchAdvancementServiceTest`, `RoundScannerTest`, `RoundResolutionJobTest`, engine `UNIT_PLACED` enrichment tests.
+
+Guides: [PHASE_4_GUIDE.md](backend/docs/PHASE_4_GUIDE.md), [PHASE_4_CHECKLIST.md](backend/docs/PHASE_4_CHECKLIST.md).
 
 ### Definition of done
 
-A complete 8-round match can run via API with worker resolution. `ROUND_RESULT` is a durable checkpoint. Full match is replayable from stored events + seed.
+Worker TX pipeline + Phase 4 read APIs are shipped. `ROUND_RESULT` is a durable checkpoint. Matches are replayable from stored plans + seed (+ events). Backend CI runs `mvn test` on push/PR. Compose already defines a worker service; full local stack (API + frontend + worker + Postgres) is Phase 7. Full 8-round loop IT remains optional.
 
 ---
 
@@ -285,6 +295,16 @@ A complete 8-round match can run via API with worker resolution. `ROUND_RESULT` 
 **Status:** Planned (after Phase 4)
 
 **Goal:** Make the game playable without compromising backend correctness.
+
+### Backend readiness (before Game UI)
+
+Shipped for reload-safe planning UI:
+
+- [x] Shared unit lookup (`yourUnits` on `/state`, `units` on commands): id, type, level, effective display stats
+- [x] Shop offer display stats from server `UnitDefinition` (no client balance tables)
+- [x] Reload IT for placed + auto-merged board units
+
+Details: [api-contract.md](docs/api-contract.md).
 
 ### Build
 
@@ -307,7 +327,7 @@ A complete 8-round match can run via API with worker resolution. `ROUND_RESULT` 
 - 5-slot holding lane per player
 - Gold and Keep HP counters
 - "Lock board" button
-- `yourBoard` IDs + `yourUnits` lookup
+- `yourBoard` IDs + `yourUnits` lookup (backend readiness above)
 
 **State polling**:
 - TanStack Query polling ~**1s** through PREPARATION / LOCKED / RESOLVING / ROUND_RESULT
@@ -374,7 +394,8 @@ A player can watch a completed round with clear tick-sequential animations and b
 ### Build
 
 **Docker Compose** (local full stack):
-- Frontend, API, worker, PostgreSQL
+- Frontend, API, worker, PostgreSQL  
+  (worker service already in `docker-compose.yml` from Phase 4; Phase 7 adds API + frontend into one compose path)
 
 **GitHub Actions CI**:
 - Backend tests (`*Test` + `*IT`)

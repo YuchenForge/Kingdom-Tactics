@@ -4,7 +4,7 @@ A deployable, server-authoritative 1v1 turn-based tactical auto-battler. Players
 
 This project is designed to showcase transactional backends, deterministic domain engines, secure command processing, and production-grade observability.
 
-**Status:** Phase 3 complete — next is Phase 4 (worker + round resolution)
+**Status:** Phase 4 complete — next is Phase 5 (frontend MVP)
 
 ---
 
@@ -66,7 +66,7 @@ cd backend && mvn -pl api -am test          # *Test + *IT (Docker for ITs)
 mvn -pl api -am spring-boot:run             # API on :8080
 ```
 
-Frontend / worker / Compose full stack arrive in Phases 5–7.
+Frontend arrives in Phase 5. Compose already includes Postgres + worker; full stack (API + frontend + worker) is Phase 7.
 
 ---
 
@@ -78,8 +78,8 @@ Frontend / worker / Compose full stack arrive in Phases 5–7.
 | **1** | Pure combat engine | ✅ Complete |
 | **2** | Backend foundation | ✅ Complete |
 | **3** | Planning & commands | ✅ Complete |
-| **4** | Worker & resolution | 📝 Next |
-| **5** | Frontend MVP | ⏳ Planned |
+| **4** | Worker & resolution | ✅ Complete |
+| **5** | Frontend MVP | 📝 Next |
 | **6** | Replay & animation | ⏳ Planned |
 | **7** | Deploy & polish | ⏳ Planned |
 | **8** | One expansion | ⏳ Planned |
@@ -161,9 +161,9 @@ See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines on commits, PRs, c
 
 ## Debugging
 
-### Replay a match (planned — Phase 4+)
+### Replay a match (Phase 4+)
 
-After Phase 4 persists events, participants can page `GET /api/games/{gameId}/events`. Visual replay is Phase 6.
+Participants can page `GET /api/games/{gameId}/events?round=&afterSequence=`. Round/match summaries: `GET .../rounds/{n}/result`, `GET .../result`. Visual replay is Phase 6.
 
 ### View game state (available now)
 
@@ -206,4 +206,4 @@ For questions or issues, open a GitHub issue or discussion.
 
 ---
 
-**Next step:** [Phase 4 — Worker and round resolution](ROADMAP.md#phase-4-worker-and-round-resolution).
+**Next step:** [Phase 5 — Frontend MVP](ROADMAP.md#phase-5-frontend-mvp).

@@ -1,8 +1,10 @@
 package com.kingdom.api.repository;
 
 import com.kingdom.api.entity.Round;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -14,6 +16,16 @@ import java.util.UUID;
 public interface RoundRepository extends JpaRepository<Round, UUID> {
 
     Optional<Round> findByGameIdAndRoundNumber(UUID gameId, int roundNumber);
+
+    /**
+     * Latest round with TX2 committed ({@code outcome IS NOT NULL}).
+     * Empty when no round has been resolved yet.
+     */
+    @Query("""
+            SELECT MAX(r.roundNumber) FROM Round r
+            WHERE r.gameId = :gameId AND r.outcome IS NOT NULL
+            """)
+    Optional<Integer> findLatestResolvedRoundNumber(@Param("gameId") UUID gameId);
 
     List<Round> findByStateAndPlanningDeadlineLessThanEqual(String state, Instant deadline);
 
@@ -34,6 +46,17 @@ public interface RoundRepository extends JpaRepository<Round, UUID> {
             ORDER BY r.finishedAt
             """)
     List<UUID> findIdsNeedingAdvance(@Param("state") String state, Pageable pageable);
+
+    /**
+     * Planning transition: pessimistic lock on this round row (any state).
+     * JPQL + {@link LockModeType#PESSIMISTIC_WRITE} so an already-managed entity is
+     * refreshed from the locked row (native {@code FOR UPDATE} alone does not).
+     * Lock order with {@link GameRepository#lockGameForUpdate} is always round then game,
+     * matching worker claim/resolve/advance.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM Round r WHERE r.id = :id")
+    Optional<Round> lockRoundForUpdate(@Param("id") UUID id);
 
     /**
      * TX1 claim: lock this round only if still LOCKED; skip if another worker holds it.

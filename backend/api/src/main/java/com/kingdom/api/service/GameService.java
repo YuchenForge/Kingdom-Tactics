@@ -28,12 +28,13 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +56,11 @@ public class GameService {
     private final ShopService shopService;
     private final PlanningDeadlineService planningDeadlineService;
     private final Clock clock;
+    /**
+     * Polling reads (multi-table) use a single Postgres snapshot so concurrent
+     * TX2/TX3 commits cannot mix old game.state/round with newer Keep HP / plans / shops.
+     */
+    private final TransactionTemplate repeatableReadTx;
 
     public GameService(
             GameRepository gameRepository,
@@ -64,7 +70,8 @@ public class GameService {
             UserRepository userRepository,
             ShopService shopService,
             PlanningDeadlineService planningDeadlineService,
-            Clock clock) {
+            Clock clock,
+            PlatformTransactionManager transactionManager) {
         this.gameRepository = gameRepository;
         this.gamePlayerRepository = gamePlayerRepository;
         this.roundRepository = roundRepository;
@@ -73,6 +80,9 @@ public class GameService {
         this.shopService = shopService;
         this.planningDeadlineService = planningDeadlineService;
         this.clock = clock;
+        this.repeatableReadTx = new TransactionTemplate(transactionManager);
+        this.repeatableReadTx.setReadOnly(true);
+        this.repeatableReadTx.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
     }
 
     // Call at the start of every game-scoped read/action.
@@ -144,60 +154,91 @@ public class GameService {
         return toGameResponse(game);
     }
 
-    @Transactional
+    /**
+     * Deadline auto-lock (if any) commits first; the lobby/state projection then
+     * loads under REPEATABLE READ so it cannot tear across concurrent resolve/advance.
+     */
     public GameResponse getGame(UUID gameId, UUID userId) {
         mdcGame(gameId);
         assertParticipant(gameId, userId);
-        Game game = loadGame(gameId);
-        game = maybeFinalizeExpiredPlanning(game);
-        return toGameResponse(game);
+        finalizeExpiredPlanningIfNeeded(gameId);
+        return repeatableReadTx.execute(status -> toGameResponse(loadGame(gameId)));
     }
 
-    @Transactional
+    /**
+     * Same snapshot isolation as {@link #getGame}: finalize outside the read TX,
+     * then assemble game + round + plans + shops + Keep HP from one Postgres snapshot.
+     */
     public GameStateResponse getState(UUID gameId, UUID userId) {
         mdcGame(gameId);
         assertParticipant(gameId, userId);
+        finalizeExpiredPlanningIfNeeded(gameId);
+        return repeatableReadTx.execute(status -> assembleState(gameId, userId));
+    }
+
+    private GameStateResponse assembleState(UUID gameId, UUID userId) {
         Game game = loadGame(gameId);
-        game = maybeFinalizeExpiredPlanning(game);
 
         if (GameStates.WAITING_FOR_PLAYERS.equals(game.getState())) {
             throw new GameNotReadyException(gameId);
         }
 
-        GamePlayer you = gamePlayerRepository.findByGameIdAndPlayerId(gameId, userId)
-                .orElseThrow(() -> new NotGameParticipantException(gameId, userId));
         Round round = roundRepository.findByGameIdAndRoundNumber(gameId, game.getCurrentRound())
                 .orElseThrow(() -> new IllegalStateException("Missing round for game " + gameId));
         RoundPlan yourPlan = roundPlanRepository.findByRoundIdAndPlayerId(round.getId(), userId)
                 .orElseThrow(() -> new IllegalStateException("Missing plan for player " + userId));
 
-        UUID opponentId = you.getSeat() == 0 ? game.getPlayer2Id() : game.getPlayer1Id();
+        UUID opponentId = resolveOpponentId(game, userId);
         RoundPlan opponentPlan = roundPlanRepository
                 .findByRoundIdAndPlayerId(round.getId(), opponentId)
                 .orElseThrow(() -> new IllegalStateException("Missing plan for opponent " + opponentId));
+
+        // Viewer shop only — never load opponent offers.
+        // Seat Keep HP is read after plan/shop so a concurrent TX2/TX3 commit that lands
+        // mid-assemble is covered by the same REPEATABLE READ snapshot as {@code game}.
+        PlanningShop yourShop = shopService.loadShop(round.getId(), userId);
+
+        GamePlayer you = gamePlayerRepository.findByGameIdAndPlayerId(gameId, userId)
+                .orElseThrow(() -> new NotGameParticipantException(gameId, userId));
         GamePlayer opponent = gamePlayerRepository.findByGameIdAndPlayerId(gameId, opponentId)
                 .orElseThrow(() -> new IllegalStateException("Missing seat for opponent " + opponentId));
 
-        // Viewer shop only — never load opponent offers.
-        PlanningShop yourShop = shopService.loadShop(round.getId(), userId);
         PlanningState yourState = PlanningStateMapper.toPlanningState(
                 yourPlan, yourShop, round.getRoundNumber());
         PlanningState opponentState = PlanningStateMapper.toPlanningState(
                 opponentPlan, PlanningShop.empty(), round.getRoundNumber());
 
-        return GameMapper.toGameStateResponse(
-                game,
+        Integer latestResolvedRound = roundRepository
+                .findLatestResolvedRoundNumber(gameId)
+                .orElse(null);
+
+        return new GameStateResponse(
+                game.getId(),
+                game.getState(),
+                game.getCurrentRound(),
+                latestResolvedRound,
                 you.getSeat(),
                 you.getKeepHp(),
                 yourPlan.getGold(),
                 opponent.getKeepHp(),
                 countUnits(opponentState),
                 PlanningStateMapper.toBoardIdGrid(yourState.getBoard()),
+                PlanningStateMapper.toUnitViews(yourState),
                 PlanningStateMapper.toLaneDtos(yourState.getLane()),
                 PlanningStateMapper.toShopDtos(yourShop),
                 round.getPlanningDeadline(),
                 yourPlan.isLocked(),
                 opponentPlan.isLocked());
+    }
+
+    private static UUID resolveOpponentId(Game game, UUID userId) {
+        if (userId.equals(game.getPlayer1Id())) {
+            return game.getPlayer2Id();
+        }
+        if (userId.equals(game.getPlayer2Id())) {
+            return game.getPlayer1Id();
+        }
+        throw new NotGameParticipantException(game.getId(), userId);
     }
 
     private Game loadGame(UUID gameId) {
@@ -206,15 +247,12 @@ public class GameService {
     }
 
     /**
-     * Read-path opportunistic lock: client still does a GET, but the server may
-     * finalize an expired PREPARATION round before building the response.
+     * Opportunistic deadline finalize before the RR snapshot is taken, so auto-lock
+     * is visible to the subsequent read. {@link PlanningDeadlineService#autoLockIfDeadlinePassed}
+     * no-ops unless the game/round are still PREPARATION and past the deadline.
      */
-    private Game maybeFinalizeExpiredPlanning(Game game) {
-        if (!GameStates.PREPARATION.equals(game.getState())) {
-            return game;
-        }
-        planningDeadlineService.autoLockIfDeadlinePassed(game.getId());
-        return loadGame(game.getId());
+    private void finalizeExpiredPlanningIfNeeded(UUID gameId) {
+        planningDeadlineService.autoLockIfDeadlinePassed(gameId);
     }
 
     private static int countUnits(PlanningState state) {
@@ -234,10 +272,7 @@ public class GameService {
     }
 
     private void createInitialPlan(UUID roundId, UUID playerId) {
-        RoundPlan plan = new RoundPlan(roundId, playerId, STARTING_GOLD);
-        plan.setBoardState(new HashMap<>());
-        plan.setLaneUnits(new ArrayList<>(Arrays.asList(null, null, null, null, null)));
-        roundPlanRepository.save(plan);
+        roundPlanRepository.save(new RoundPlan(roundId, playerId, STARTING_GOLD));
     }
 
     private GameResponse toGameResponse(Game game) {

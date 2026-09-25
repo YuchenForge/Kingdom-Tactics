@@ -10,6 +10,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -130,6 +131,26 @@ public class GlobalExceptionHandler {
                         "VALIDATION_ERROR",
                         "Invalid value for " + ex.getName(),
                         HttpStatus.BAD_REQUEST.value()));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiError> missingParam(MissingServletRequestParameterException ex) {
+        log.info("Missing request parameter: {}", ex.getParameterName());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(error(
+                        "VALIDATION_ERROR",
+                        "Missing required parameter: " + ex.getParameterName(),
+                        HttpStatus.BAD_REQUEST.value()));
+    }
+
+    /** Service-level query/path validation (e.g. round out of 1..8, limit < 1). */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> illegalArgument(IllegalArgumentException ex) {
+        log.info("Validation failed: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(error("VALIDATION_ERROR", ex.getMessage(), HttpStatus.BAD_REQUEST.value()));
     }
 
     @ExceptionHandler(PlanningCommandException.class)

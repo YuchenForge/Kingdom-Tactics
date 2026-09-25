@@ -2,15 +2,23 @@ package com.kingdom.worker.job;
 
 import com.kingdom.api.entity.Game;
 import com.kingdom.api.entity.GamePlayer;
+import com.kingdom.api.entity.GameStateSnapshot;
 import com.kingdom.api.entity.GameStates;
 import com.kingdom.api.entity.Round;
 import com.kingdom.api.entity.RoundPlan;
 import com.kingdom.api.entity.User;
 import com.kingdom.api.repository.GamePlayerRepository;
 import com.kingdom.api.repository.GameRepository;
+import com.kingdom.api.repository.GameStateSnapshotRepository;
 import com.kingdom.api.repository.RoundPlanRepository;
 import com.kingdom.api.repository.RoundRepository;
 import com.kingdom.api.repository.UserRepository;
+import com.kingdom.engine.domain.ResolutionResult;
+import com.kingdom.engine.domain.UnitInstance;
+import com.kingdom.worker.service.ClaimService;
+import com.kingdom.worker.service.ClaimedRound;
+import com.kingdom.worker.service.ResolutionService;
+import com.kingdom.worker.service.ResolveService;
 import com.kingdom.worker.support.AbstractPostgresIT;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +38,12 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
     @Autowired
     private RoundResolutionJob job;
     @Autowired
+    private ClaimService claimService;
+    @Autowired
+    private ResolutionService resolutionService;
+    @Autowired
+    private ResolveService resolveService;
+    @Autowired
     private UserRepository userRepository;
     @Autowired
     private GameRepository gameRepository;
@@ -39,6 +53,8 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
     private GamePlayerRepository gamePlayerRepository;
     @Autowired
     private RoundPlanRepository roundPlanRepository;
+    @Autowired
+    private GameStateSnapshotRepository snapshotRepository;
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
@@ -147,12 +163,106 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
         assertThat(round.getFinishedAt()).isNull();
         assertThat(round.getAdvancedAt()).isNull();
 
-        Integer eventCount = jdbcTemplate.queryForObject(
+        assertThat(eventCount(fixture.gameId(), 1)).isZero();
+    }
+
+    /**
+     * Path 2: crash after TX1 leaves RESOLVING + seed; retryResolving completes TX2/TX3
+     * without reclaiming or changing combat_seed.
+     */
+    @Test
+    void retryResolving_recoversAfterCrashBetweenTx1AndTx2() {
+        Fixture fixture = seedLockedRoundWithValidPlans();
+
+        ClaimedRound claimed = claimService.claim(fixture.roundId()).orElseThrow();
+
+        Round afterClaim = roundRepository.findById(fixture.roundId()).orElseThrow();
+        Game gameAfterClaim = gameRepository.findById(fixture.gameId()).orElseThrow();
+        assertThat(afterClaim.getState()).isEqualTo(GameStates.RESOLVING);
+        assertThat(gameAfterClaim.getState()).isEqualTo(GameStates.RESOLVING);
+        assertThat(afterClaim.getCombatSeed()).isEqualTo(claimed.combatSeed());
+        assertThat(afterClaim.getOutcome()).isNull();
+        assertThat(afterClaim.getAdvancedAt()).isNull();
+        assertThat(eventCount(fixture.gameId(), 1)).isZero();
+
+        Long seedAfterClaim = afterClaim.getCombatSeed();
+
+        job.retryResolving(fixture.roundId());
+
+        Round afterRetry = roundRepository.findById(fixture.roundId()).orElseThrow();
+        Game gameAfterRetry = gameRepository.findById(fixture.gameId()).orElseThrow();
+        assertThat(afterRetry.getCombatSeed()).isEqualTo(seedAfterClaim);
+        assertThat(afterRetry.getState()).isEqualTo(GameStates.ROUND_RESULT);
+        assertThat(afterRetry.getOutcome()).isNotNull();
+        assertThat(afterRetry.getKeepDamage()).isNotNull().containsKeys("0", "1");
+        assertThat(afterRetry.getFinishedAt()).isNotNull();
+        assertThat(afterRetry.getAdvancedAt()).isNotNull();
+        assertThat(eventCount(fixture.gameId(), 1)).isGreaterThan(0);
+        assertThat(gameAfterRetry.getState()).isEqualTo(GameStates.PREPARATION);
+        assertThat(gameAfterRetry.getCurrentRound()).isEqualTo(2);
+
+        int eventsAfterFirst = eventCount(fixture.gameId(), 1);
+        job.retryResolving(fixture.roundId()); // already ROUND_RESULT → no-op
+        assertThat(eventCount(fixture.gameId(), 1)).isEqualTo(eventsAfterFirst);
+        assertThat(roundRepository.findById(fixture.roundId()).orElseThrow().getCombatSeed())
+                .isEqualTo(seedAfterClaim);
+    }
+
+    /**
+     * After TX2: reload locked plans + combat_seed, re-run engine, match persisted
+     * outcome / keepDamage / end-snapshot survivor counts.
+     */
+    @Test
+    void afterTx2_replayingPlansAndSeed_matchesPersistedOutcomeAndSurvivors() {
+        Fixture fixture = seedLockedRoundWithValidPlans();
+
+        ClaimedRound claimed = claimService.claim(fixture.roundId()).orElseThrow();
+        ResolutionResult first = resolutionService.resolve(
+                fixture.roundId(), fixture.gameId(), claimed.combatSeed());
+        assertThat(resolveService.commit(
+                fixture.roundId(), fixture.gameId(), 1, first)).isTrue();
+
+        Round round = roundRepository.findById(fixture.roundId()).orElseThrow();
+        assertThat(round.getState()).isEqualTo(GameStates.ROUND_RESULT);
+        assertThat(round.getAdvancedAt()).isNull();
+        assertThat(round.getCombatSeed()).isEqualTo(claimed.combatSeed());
+
+        ResolutionResult replay = resolutionService.resolve(
+                fixture.roundId(), fixture.gameId(), round.getCombatSeed());
+
+        assertThat(replay.getEvents()).isEqualTo(first.getEvents());
+        assertThat(replay.getEndReason()).isEqualTo(round.getOutcome());
+        assertThat(Map.of(
+                "0", replay.getKeepDamageForPlayer(0),
+                "1", replay.getKeepDamageForPlayer(1)))
+                .isEqualTo(round.getKeepDamage());
+
+        List<GameStateSnapshot> snaps = snapshotRepository
+                .findByGameIdAndRoundNumberAndRoundStart(fixture.gameId(), 1, false);
+        assertThat(snaps).hasSize(2);
+
+        Map<UUID, Integer> seatByPlayer = Map.of(
+                fixture.player0Id(), 0,
+                fixture.player1Id(), 1);
+        for (GameStateSnapshot snap : snaps) {
+            int seat = seatByPlayer.get(snap.getPlayerId());
+            long expectedSurvivors = replay.getFinalBoard().getAliveUnits().stream()
+                    .map(UnitInstance::getPlayerId)
+                    .filter(id -> id != null && id == seat)
+                    .count();
+            assertThat(snap.getBoard()).hasSize((int) expectedSurvivors);
+            assertThat(snap.getKeepHp()).isEqualTo(
+                    Math.max(0, 20 - replay.getKeepDamageForPlayer(seat)));
+        }
+    }
+
+    private int eventCount(UUID gameId, int roundNumber) {
+        Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM game_events WHERE game_id = ? AND round_number = ?",
                 Integer.class,
-                fixture.gameId(),
-                1);
-        assertThat(eventCount).isZero();
+                gameId,
+                roundNumber);
+        return count == null ? 0 : count;
     }
 
     private Fixture seedLockedRoundWithValidPlans() {
