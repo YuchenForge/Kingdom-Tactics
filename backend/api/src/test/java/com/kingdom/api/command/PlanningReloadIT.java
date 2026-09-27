@@ -10,6 +10,7 @@ import com.kingdom.api.service.ShopService;
 import com.kingdom.api.support.AbstractPostgresIT;
 import com.kingdom.api.support.TestAuthSupport;
 import com.kingdom.engine.domain.UnitTypeResolver;
+import com.kingdom.engine.planning.PlanningHelpers;
 import com.kingdom.engine.planning.PlanningShop;
 import com.kingdom.engine.planning.PlanningState;
 import com.kingdom.engine.planning.PlanningUnit;
@@ -98,6 +99,8 @@ class PlanningReloadIT extends AbstractPostgresIT {
             }
         }
         assertThat(mergedId).isNotBlank();
+        assertThat(buyBody.path("units").path(mergedId).path("sellRefund").asInt())
+                .isEqualTo(PlanningHelpers.sellRefund("Squire", 2));
 
         mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/relocate")
                         .header("Authorization", "Bearer " + game.aliceToken())
@@ -202,7 +205,9 @@ class PlanningReloadIT extends AbstractPostgresIT {
                 .andExpect(jsonPath("$.lane[0].unitId").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.units." + unitId + ".unitType", is(unitType)))
                 .andExpect(jsonPath("$.units." + unitId + ".maxHp", is(def.getMaxHp(1))))
-                .andExpect(jsonPath("$.units." + unitId + ".attack", is(def.getAttack(1))));
+                .andExpect(jsonPath("$.units." + unitId + ".attack", is(def.getAttack(1))))
+                .andExpect(jsonPath("$.units." + unitId + ".sellRefund",
+                        is(PlanningHelpers.sellRefund(unitType, 1))));
     }
 
     private static void assertUnitView(
@@ -221,5 +226,7 @@ class PlanningReloadIT extends AbstractPostgresIT {
         assertThat(node.path("range").asInt()).isEqualTo(range);
         assertThat(node.path("specialAbility").asText()).isEqualTo(specialAbility);
         assertThat(node.path("healAmount").asInt()).isEqualTo(healAmount);
+        assertThat(node.path("sellRefund").asInt())
+                .isEqualTo(PlanningHelpers.sellRefund(unitType, level));
     }
 }

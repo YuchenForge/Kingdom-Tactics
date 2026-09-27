@@ -137,7 +137,8 @@ class PlanningStateMapperTest {
                 squire.getAttack(2),
                 squire.getRange(),
                 squire.getSpecialAbility(),
-                squire.getHealAmount(2)));
+                squire.getHealAmount(2),
+                2));
         assertThat(response.units().get("u1").maxHp()).isEqualTo(knight.getMaxHp(1));
         assertThat(response.units().get("u2").maxHp()).isEqualTo(mage.getMaxHp(1));
         assertThat(response.opponentIsLocked()).isNull();

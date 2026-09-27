@@ -13,6 +13,7 @@ public record UnitViewDto(
         int attack,
         int range,
         String specialAbility,
-        int healAmount
+        int healAmount,
+        int sellRefund
 ) {
 }

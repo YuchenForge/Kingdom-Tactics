@@ -8,6 +8,7 @@ import com.kingdom.api.entity.RoundPlan;
 import com.kingdom.engine.domain.Board;
 import com.kingdom.engine.domain.UnitDefinition;
 import com.kingdom.engine.domain.UnitTypeResolver;
+import com.kingdom.engine.planning.PlanningHelpers;
 import com.kingdom.engine.planning.PlanningShop;
 import com.kingdom.engine.planning.PlanningState;
 import com.kingdom.engine.planning.PlanningUnit;
@@ -131,7 +132,8 @@ public final class PlanningStateMapper {
                 def.getAttack(level),
                 def.getRange(),
                 def.getSpecialAbility(),
-                def.getHealAmount(level));
+                def.getHealAmount(level),
+                PlanningHelpers.sellRefund(unit.getType(), level));
     }
 
     public static List<ShopSlotDto> toShopDtos(PlanningShop shop) {
