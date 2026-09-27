@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
@@ -206,6 +207,75 @@ class AuthIT extends AbstractPostgresIT {
                                 """.formatted(oversizedEmail)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void registerPasswordAt72AsciiBytesSucceeds() throws Exception {
+        String password = "a".repeat(72);
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "bcryptok",
+                                  "email": "bcryptok@test.com",
+                                  "password": "%s"
+                                }
+                                """.formatted(password)))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void registerPasswordOver72AsciiBytesReturns400() throws Exception {
+        String password = "a".repeat(73);
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "bcryptlong",
+                                  "email": "bcryptlong@test.com",
+                                  "password": "%s"
+                                }
+                                """.formatted(password)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value(containsString("72 UTF-8 bytes")));
+    }
+
+    @Test
+    void registerMultibytePasswordOver72BytesReturns400() throws Exception {
+        // 37 × é = 74 UTF-8 bytes, only 37 characters — character @Size(max=72) would miss this
+        String password = "é".repeat(37);
+        assertThat(password.length()).isEqualTo(37);
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "unicodelong",
+                                  "email": "unicodelong@test.com",
+                                  "password": "%s"
+                                }
+                                """.formatted(password)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value(containsString("72 UTF-8 bytes")));
+    }
+
+    @Test
+    void loginPasswordOver72BytesReturns400() throws Exception {
+        TestAuthSupport.register(mockMvc, "loginlong", "loginlong@test.com");
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "loginlong@test.com",
+                                  "password": "%s"
+                                }
+                                """.formatted("a".repeat(73))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value(containsString("72 UTF-8 bytes")));
     }
 
     private static void assertNoPasswordFields(String body) {

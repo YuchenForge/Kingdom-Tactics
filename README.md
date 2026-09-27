@@ -51,7 +51,7 @@ This project is designed to showcase transactional backends, deterministic domai
 ### Prerequisites
 
 - Java 21
-- Node.js 18+
+- Node.js 20.19+ or 22.12+ (Vite; see [Vite guide](https://vite.dev/guide/))
 - Docker & Docker Compose
 - PostgreSQL 15+ (via Compose)
 
@@ -61,12 +61,16 @@ See **[`docs/local-setup.md`](docs/local-setup.md)** for the current commands. S
 
 ```bash
 git clone <repo-url> && cd kingdomTactics
-docker compose up -d          # Postgres
-cd backend && mvn -pl api -am test          # *Test + *IT (Docker for ITs)
-mvn -pl api -am spring-boot:run             # API on :8080
+docker compose up -d postgres          # Postgres only (API owns Flyway)
+cd backend
+mvn -pl api -am test                   # *Test + *IT (Docker for ITs)
+mvn install -DskipTests                # install modules to local .m2
+mvn -pl api spring-boot:run            # API on :8080 — runs migrations
+# other terminal (still in backend), after API has migrated:
+mvn -pl worker spring-boot:run         # or: docker compose up -d worker
 ```
 
-Frontend arrives in Phase 5. Compose already includes Postgres + worker; full stack (API + frontend + worker) is Phase 7.
+Frontend arrives in Phase 5. Compose defines Postgres + worker; start the worker only after the API has applied migrations. Do not combine `-am` with `spring-boot:run`. Full stack (API + frontend + worker) is Phase 7.
 
 ---
 
@@ -187,7 +191,7 @@ A: It enables perfect replay, auditability, and testing. The same inputs always 
 A: Players cannot play, but their matches are safe. Once the backend recovers, they resume the round they were in. Complete matches are fully replayable.
 
 **Q: Can I add new units later?**
-A: Yes. New units are added to the unit definitions table, and a new `rules_version` is recorded with each round. Old matches remain valid under their original rules version.
+A: Yes. Unit stats live in the engine as in-code `UnitDefinition` factories (not a DB table). Each round stores a `rules_version` string (currently always `"1.0"`); multi-version historical rule replay is not implemented yet.
 
 **Q: Is this a commercial game?**
 A: No. This is a portfolio project demonstrating full-stack SWE: transactional systems, determinism, observability, and production-grade reliability.

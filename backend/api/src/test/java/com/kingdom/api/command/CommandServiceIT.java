@@ -5,13 +5,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kingdom.api.entity.Command;
 import com.kingdom.api.entity.Game;
 import com.kingdom.api.entity.GameStates;
+import com.kingdom.api.entity.Round;
 import com.kingdom.api.entity.RoundPlan;
+import com.kingdom.api.entity.ShopOffer;
 import com.kingdom.api.repository.CommandRepository;
 import com.kingdom.api.repository.GameRepository;
 import com.kingdom.api.repository.RoundPlanRepository;
 import com.kingdom.api.repository.RoundRepository;
+import com.kingdom.api.repository.ShopOfferRepository;
+import com.kingdom.api.service.ShopService;
 import com.kingdom.api.support.AbstractPostgresIT;
 import com.kingdom.api.support.TestAuthSupport;
+import com.kingdom.engine.planning.ShopGenerator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -20,6 +25,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -57,6 +63,12 @@ class CommandServiceIT extends AbstractPostgresIT {
 
     @Autowired
     private RoundPlanRepository roundPlanRepository;
+
+    @Autowired
+    private ShopService shopService;
+
+    @Autowired
+    private ShopOfferRepository shopOfferRepository;
 
     @Test
     void buy_thenIdempotentRetry_sameGold_oneCommandRow() throws Exception {
@@ -278,7 +290,15 @@ class CommandServiceIT extends AbstractPostgresIT {
                 .andExpect(status().isLocked())
                 .andExpect(jsonPath("$.error", is("LOCKED")));
 
-        // Bob's GET /state shop is his own offers — never Alice's.
+        // Seed deliberately different remaining offers — random seeds can collide.
+        // Arrays.asList (not List.of): slot 0 is sold/null after both players bought.
+        UUID gameUuid = UUID.fromString(game.gameId());
+        Round round = roundRepository.findByGameIdAndRoundNumber(gameUuid, 1).orElseThrow();
+        List<String> aliceOffers = Arrays.asList(null, "Squire", "Mage");
+        List<String> bobOffers = Arrays.asList(null, "Ranger", "Knight");
+        shopService.persistOffers(round.getId(), game.aliceId(), aliceOffers);
+        shopService.persistOffers(round.getId(), game.bobId(), bobOffers);
+
         MvcResult bobState = mockMvc.perform(get("/api/games/" + game.gameId() + "/state")
                         .header("Authorization", "Bearer " + game.bobToken()))
                 .andExpect(status().isOk())
@@ -289,10 +309,10 @@ class CommandServiceIT extends AbstractPostgresIT {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        JsonNode aliceShop = objectMapper.readTree(aliceState.getResponse().getContentAsString()).path("shop");
-        JsonNode bobShop = objectMapper.readTree(bobState.getResponse().getContentAsString()).path("shop");
-        // Alice bought slot 0 earlier; Bob bought slot 0 too — remaining offers still differ by player seed.
-        assertThat(bobShop.toString()).isNotEqualTo(aliceShop.toString());
+        List<String> aliceShop = shopUnitTypes(aliceState);
+        List<String> bobShop = shopUnitTypes(bobState);
+        assertThat(aliceShop).containsExactlyElementsOf(aliceOffers);
+        assertThat(bobShop).containsExactlyElementsOf(bobOffers);
         // Opponent board never exposed as yourBoard for Bob (Alice's unit is not Bob's board).
         assertThat(bobState.getResponse().getContentAsString()).doesNotContain(unitId);
     }
@@ -300,14 +320,9 @@ class CommandServiceIT extends AbstractPostgresIT {
     @Test
     void refresh_costsOneGold_replacesAllShopSlots() throws Exception {
         TestAuthSupport.JoinedGame game = TestAuthSupport.joinTwoPlayers(mockMvc, "cmd_refresh");
-
-        MvcResult stateBefore = mockMvc.perform(get("/api/games/" + game.gameId() + "/state")
-                        .header("Authorization", "Bearer " + game.aliceToken()))
-                .andExpect(status().isOk())
-                .andReturn();
-        String shopBefore = objectMapper.readTree(stateBefore.getResponse().getContentAsString())
-                .path("shop")
-                .toString();
+        UUID gameUuid = UUID.fromString(game.gameId());
+        List<String> expectedOffers = ShopGenerator.generateOfferTypes(
+                gameUuid, 1, game.aliceId(), 1);
 
         MvcResult refreshResult = mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/refresh")
                         .header("Authorization", "Bearer " + game.aliceToken())
@@ -321,10 +336,15 @@ class CommandServiceIT extends AbstractPostgresIT {
                 .andExpect(jsonPath("$.shop[2].unitType", notNullValue()))
                 .andReturn();
 
-        String shopAfter = objectMapper.readTree(refreshResult.getResponse().getContentAsString())
-                .path("shop")
-                .toString();
-        assertThat(shopAfter).isNotEqualTo(shopBefore);
+        assertThat(shopUnitTypes(refreshResult)).containsExactlyElementsOf(expectedOffers);
+
+        Round round = roundRepository.findByGameIdAndRoundNumber(gameUuid, 1).orElseThrow();
+        List<String> persisted = shopOfferRepository
+                .findByRoundIdAndPlayerIdOrderBySlotAsc(round.getId(), game.aliceId())
+                .stream()
+                .map(ShopOffer::getUnitType)
+                .toList();
+        assertThat(persisted).containsExactlyElementsOf(expectedOffers);
     }
 
     @Test
@@ -377,5 +397,18 @@ class CommandServiceIT extends AbstractPostgresIT {
                 .andReturn();
         return objectMapper.readTree(state.getResponse().getContentAsString())
                 .path("shop").get(slot).path("cost").asInt();
+    }
+
+    private List<String> shopUnitTypes(MvcResult result) throws Exception {
+        JsonNode shop = objectMapper.readTree(result.getResponse().getContentAsString()).path("shop");
+        // Arrays.asList: sold slots are null (List.of rejects null elements).
+        return Arrays.asList(
+                textOrNull(shop.get(0).path("unitType")),
+                textOrNull(shop.get(1).path("unitType")),
+                textOrNull(shop.get(2).path("unitType")));
+    }
+
+    private static String textOrNull(JsonNode node) {
+        return node.isNull() || node.isMissingNode() ? null : node.asText();
     }
 }

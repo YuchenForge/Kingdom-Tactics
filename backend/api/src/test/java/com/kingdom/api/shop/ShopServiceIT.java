@@ -80,10 +80,10 @@ class ShopServiceIT extends AbstractPostgresIT {
     void persistOffers_updatesInPlaceWithoutDuplicateRows() throws Exception {
         LocalGame game = joinTwoPlayers();
 
-        List<String> before = shopOfferRepository
+        List<UUID> beforeIds = shopOfferRepository
                 .findByRoundIdAndPlayerIdOrderBySlotAsc(game.roundId(), game.aliceId())
                 .stream()
-                .map(ShopOffer::getUnitType)
+                .map(ShopOffer::getId)
                 .toList();
 
         List<String> refreshed = ShopGenerator.generateOfferTypes(
@@ -93,41 +93,43 @@ class ShopServiceIT extends AbstractPostgresIT {
         List<ShopOffer> afterRows = shopOfferRepository
                 .findByRoundIdAndPlayerIdOrderBySlotAsc(game.roundId(), game.aliceId());
         List<String> after = afterRows.stream().map(ShopOffer::getUnitType).toList();
+        List<UUID> afterIds = afterRows.stream().map(ShopOffer::getId).toList();
 
         assertThat(afterRows).hasSize(PlanningShop.SLOT_COUNT);
         assertThat(after).containsExactlyElementsOf(refreshed);
-        assertThat(after).isNotEqualTo(before);
+        assertThat(afterIds).containsExactlyElementsOf(beforeIds);
     }
 
     @Test
     void getState_showsOnlyViewerOffers() throws Exception {
         LocalGame game = joinTwoPlayers();
 
-        List<String> aliceTypes = shopOfferRepository
-                .findByRoundIdAndPlayerIdOrderBySlotAsc(game.roundId(), game.aliceId())
-                .stream()
-                .map(ShopOffer::getUnitType)
-                .toList();
-        List<String> bobTypes = shopOfferRepository
-                .findByRoundIdAndPlayerIdOrderBySlotAsc(game.roundId(), game.bobId())
-                .stream()
-                .map(ShopOffer::getUnitType)
-                .toList();
+        // Seed deliberately different offers — random player seeds can collide.
+        List<String> aliceTypes = List.of("Squire", "Mage", "Ranger");
+        List<String> bobTypes = List.of("Knight", "Healer", "Shieldbearer");
+        shopService.persistOffers(game.roundId(), game.aliceId(), aliceTypes);
+        shopService.persistOffers(game.roundId(), game.bobId(), bobTypes);
 
-        MvcResult state = mockMvc.perform(get("/api/games/" + game.gameId() + "/state")
+        MvcResult aliceState = mockMvc.perform(get("/api/games/" + game.gameId() + "/state")
                         .header("Authorization", "Bearer " + game.aliceToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shop", hasSize(3)))
                 .andReturn();
+        MvcResult bobState = mockMvc.perform(get("/api/games/" + game.gameId() + "/state")
+                        .header("Authorization", "Bearer " + game.bobToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shop", hasSize(3)))
+                .andReturn();
 
-        GameStateResponse response = objectMapper.readValue(
-                state.getResponse().getContentAsString(), GameStateResponse.class);
-        List<String> shopTypes = response.shop().stream().map(ShopSlotDto::unitType).toList();
+        GameStateResponse aliceResponse = objectMapper.readValue(
+                aliceState.getResponse().getContentAsString(), GameStateResponse.class);
+        GameStateResponse bobResponse = objectMapper.readValue(
+                bobState.getResponse().getContentAsString(), GameStateResponse.class);
 
-        assertThat(shopTypes).isEqualTo(aliceTypes);
-        if (!aliceTypes.equals(bobTypes)) {
-            assertThat(shopTypes).isNotEqualTo(bobTypes);
-        }
+        assertThat(aliceResponse.shop().stream().map(ShopSlotDto::unitType).toList())
+                .containsExactlyElementsOf(aliceTypes);
+        assertThat(bobResponse.shop().stream().map(ShopSlotDto::unitType).toList())
+                .containsExactlyElementsOf(bobTypes);
     }
 
     private record LocalGame(

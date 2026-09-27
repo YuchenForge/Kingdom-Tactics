@@ -33,7 +33,6 @@ Kingdom Tactics is developed in 8 phases, each with a clear definition of "done.
 - `PlayerState` — One player's state
 - `Board` — 4×4 placement board (local coordinates)
 - `CombatBoard` — 4×8 merged combat board (P0 rotated 180°, P1 unchanged; global coordinates)
-- `HoldingLane` — 5-slot holding lane for purchased units
 - `Coordinates` — Local ↔ global coordinate mapping
 - `UnitInstance` — An instantiated unit with HP, position, cooldown
 - `UnitDefinition` — Unit stats (HP, ATK, RNG, special ability)
