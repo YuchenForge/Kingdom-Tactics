@@ -1,2 +1,18 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
+
+body { margin: 0; background: var(--kt-bg); color: var(--kt-text); font-family: var(--kt-font-ui); }
+main { max-width: 640px; margin: 8vh auto; padding: var(--kt-space-8); background: var(--kt-surface); border-radius: var(--kt-radius-lg); box-shadow: var(--kt-shadow-panel); }
+h1 { font-size: 2rem; font-weight: 700; margin-bottom: 1rem; }
+p, ul, section, form { margin: 1rem 0; }
+nav { display: flex; gap: 1rem; }
+a { color: var(--kt-friendly); text-decoration: underline; }
+label { display: grid; gap: .4rem; margin: 1rem 0; }
+input { min-width: 0; width: 100%; padding: .7rem; background: var(--kt-bg); border: 1px solid var(--kt-border); border-radius: var(--kt-radius-sm); }
+button { padding: .65rem 1rem; margin: .3rem .6rem .3rem 0; background: var(--kt-surface-raised); border: 1px solid var(--kt-border); border-radius: var(--kt-radius-md); cursor: pointer; }
+button:hover { border-color: var(--kt-friendly); }
+button:disabled { opacity: .55; cursor: wait; }
+:focus-visible { outline: 2px solid var(--kt-focus); outline-offset: 3px; }
+[role="alert"] { color: var(--kt-danger); }
+.eyebrow { color: var(--kt-gold); }
+@media (max-width: 680px) { main { margin: 1rem; padding: 1.3rem; } }
