@@ -8,15 +8,22 @@ import App from './App'
 import * as api from './api/gameApi'
 import { ApiError, setAuthToken, getAuthToken, clearAuthToken } from './api/client'
 import { safeNext, inviteDestination } from './lib/navigation'
-import type { GameOverview } from './types'
+import type { GameOverview, GameState } from './types'
 
-vi.mock('./api/gameApi', () => ({
+vi.mock('./api/gameApi', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./api/gameApi')>(),
   me: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn(),
-  createGame: vi.fn(), joinGame: vi.fn(), getGame: vi.fn(),
+  createGame: vi.fn(), joinGame: vi.fn(), getGame: vi.fn(), getState: vi.fn(), getRoundResult: vi.fn(),
 }))
 const user = { userId: 'u1', username: 'Alice', email: 'a@example.com', rating: 1000, createdAt: '' }
 const game: GameOverview = { gameId: 'g1', state: 'WAITING_FOR_PLAYERS', currentRound: 1,
   players: [{ playerId: 'u1', username: 'Alice', keepHp: 20, gold: 10, seat: 0 }] }
+const state: GameState = {
+  gameId: 'g1', state: 'PREPARATION', currentRound: 1, latestResolvedRound: null,
+  yourSeat: 0, yourKeepHp: 20, yourGold: 10, opponentKeepHp: 20, opponentUnitCount: 0,
+  yourBoard: [], yourUnits: {}, yourLane: [], shop: [], planningDeadline: '2026-09-30T12:00:00Z',
+  isLocked: false, opponentIsLocked: false,
+}
 const clients: QueryClient[] = []
 function Location() { const location = useLocation(); return <output data-testid="location">{location.pathname}{location.search}</output> }
 function renderApp(path = '/') {
@@ -42,6 +49,7 @@ beforeEach(() => {
     setAuthToken('jwt'); return { userId: 'u1', username: 'Alice', token: 'jwt' }
   })
   vi.mocked(api.getGame).mockResolvedValue(game)
+  vi.mocked(api.getState).mockResolvedValue(state)
   vi.mocked(api.createGame).mockResolvedValue(game)
   vi.mocked(api.joinGame).mockResolvedValue({ ...game, state: 'PREPARATION' })
 })
@@ -174,6 +182,34 @@ describe('auth and lobby routes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Log out' }))
     await screen.findByRole('heading', { name: 'Log in' })
     expect(getAuthToken()).toBeNull(); expect(client.getQueryData(['me'])).toBeUndefined()
+  })
+})
+
+describe('play page state', () => {
+  it('polls GET /state and keeps polling through a round-result window', async () => {
+    setAuthToken('jwt')
+    vi.mocked(api.getState).mockResolvedValue({ ...state, state: 'ROUND_RESULT', latestResolvedRound: 1 })
+    renderApp('/games/g1/play')
+    await screen.findByText('Phase: ROUND_RESULT')
+    expect(api.getGame).not.toHaveBeenCalled()
+    vi.mocked(api.getState).mockResolvedValue({ ...state, currentRound: 2 })
+    await screen.findByText('Round 2', {}, { timeout: 2500 })
+    expect(vi.mocked(api.getState).mock.calls.length).toBeGreaterThanOrEqual(2)
+  })
+  it('leaves play for the result route when the match finishes', async () => {
+    setAuthToken('jwt'); renderApp('/games/g1/play')
+    await screen.findByText('Phase: PREPARATION')
+    vi.mocked(api.getState).mockResolvedValue({ ...state, state: 'FINISHED' })
+    await screen.findByRole('heading', { name: 'Match result' }, { timeout: 2500 })
+    expect(screen.getByTestId('location').textContent).toBe('/games/g1/result')
+  })
+  it('expires an unauthorized state poll onto auth with the play route preserved', async () => {
+    setAuthToken('jwt')
+    vi.mocked(api.getState).mockRejectedValue(new ApiError(401, 'UNAUTHORIZED', 'Expired'))
+    renderApp('/games/g1/play')
+    await screen.findByRole('heading', { name: 'Log in' })
+    await waitFor(() => expect(getAuthToken()).toBeNull())
+    expect(screen.getByTestId('location')).toHaveTextContent('/auth?next=%2Fgames%2Fg1%2Fplay')
   })
 })
 
