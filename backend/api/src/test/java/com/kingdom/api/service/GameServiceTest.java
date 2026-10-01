@@ -53,6 +53,25 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class GameServiceTest {
 
+    @Test
+    void combatFormations_arePrivateDuringPlanning_andUseEngineCoordinates() {
+        var board0 = new com.kingdom.engine.planning.PlanningUnit[4][4];
+        var board1 = new com.kingdom.engine.planning.PlanningUnit[4][4];
+        board0[1][2] = new com.kingdom.engine.planning.PlanningUnit("a", "Squire", 2);
+        board1[2][1] = new com.kingdom.engine.planning.PlanningUnit("b", "Archer", 1);
+        var lane = new com.kingdom.engine.planning.PlanningUnit[5];
+        lane[0] = new com.kingdom.engine.planning.PlanningUnit("reserve", "Squire", 1);
+        var a = new com.kingdom.engine.planning.PlanningState(10, true, PlanningShop.empty(), lane, board0, 1);
+        var b = new com.kingdom.engine.planning.PlanningState(10, true, PlanningShop.empty(),
+                new com.kingdom.engine.planning.PlanningUnit[5], board1, 1);
+        assertThat(GameService.combatUnits(GameStates.PREPARATION, a, 0, b, 1)).isEmpty();
+        for (String phase : List.of(GameStates.LOCKED, GameStates.RESOLVING, GameStates.ROUND_RESULT)) {
+            assertThat(GameService.combatUnits(phase, a, 0, b, 1)).containsExactly(
+                    new com.kingdom.api.dto.CombatUnitDto("a", "Squire", 2, 0, 2, 1),
+                    new com.kingdom.api.dto.CombatUnitDto("b", "Archer", 1, 1, 2, 5));
+        }
+    }
+
     private static final Instant FIXED_NOW = Instant.parse("2024-06-01T12:00:00Z");
 
     @Mock

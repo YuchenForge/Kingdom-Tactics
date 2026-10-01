@@ -1,6 +1,9 @@
 package com.kingdom.api.service;
 
 import com.kingdom.api.dto.GameResponse;
+import com.kingdom.api.dto.CombatUnitDto;
+import com.kingdom.engine.domain.Coordinates;
+import java.util.ArrayList;
 import com.kingdom.api.dto.GameStateResponse;
 import com.kingdom.api.entity.Game;
 import com.kingdom.api.entity.GamePlayer;
@@ -228,7 +231,29 @@ public class GameService {
                 PlanningStateMapper.toShopDtos(yourShop),
                 round.getPlanningDeadline(),
                 yourPlan.isLocked(),
-                opponentPlan.isLocked());
+                opponentPlan.isLocked(),
+                combatUnits(game.getState(), yourState, you.getSeat(), opponentState, opponent.getSeat()));
+    }
+
+    static List<CombatUnitDto> combatUnits(String phase, PlanningState yours, int yourSeat,
+                                                PlanningState theirs, int theirSeat) {
+        if (!GameStates.LOCKED.equals(phase) && !GameStates.RESOLVING.equals(phase)
+                && !GameStates.ROUND_RESULT.equals(phase)) return List.of();
+        List<CombatUnitDto> units = new ArrayList<>();
+        appendCombatUnits(units, yours, yourSeat);
+        appendCombatUnits(units, theirs, theirSeat);
+        return List.copyOf(units);
+    }
+
+    private static void appendCombatUnits(List<CombatUnitDto> units, PlanningState state, int seat) {
+        PlanningUnit[][] board = state.getBoard();
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 4; x++) {
+                PlanningUnit unit = board[x][y];
+                if (unit != null) units.add(new CombatUnitDto(unit.getId(), unit.getType(), unit.getLevel(),
+                        seat, Coordinates.toCombatX(x, seat), Coordinates.toCombatY(y, seat)));
+            }
+        }
     }
 
     private static UUID resolveOpponentId(Game game, UUID userId) {

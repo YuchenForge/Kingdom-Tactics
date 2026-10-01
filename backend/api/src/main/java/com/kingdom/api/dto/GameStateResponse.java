@@ -21,6 +21,7 @@ public record GameStateResponse(
         List<ShopSlotDto> shop,
         Instant planningDeadline,
         boolean isLocked,
-        boolean opponentIsLocked
+        boolean opponentIsLocked,
+        List<CombatUnitDto> combatUnits // both formations only after preparation closes
 ) {
 }

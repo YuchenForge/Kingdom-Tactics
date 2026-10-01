@@ -82,7 +82,11 @@ export type ShopSlot = {
 /** 4×4 grid of unit ids (`yourBoard[y][x]`). */
 export type BoardGrid = (string | null)[][]
 
+export type CombatUnit = { id: string; type: string; level: number; seat: number; x: number; y: number }
+
 export type GameState = {
+  combatUnits?: CombatUnit[]
+
   gameId: string
   state: GamePhase
   currentRound: number
