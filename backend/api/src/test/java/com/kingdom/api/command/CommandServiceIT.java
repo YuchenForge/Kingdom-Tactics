@@ -243,6 +243,15 @@ class CommandServiceIT extends AbstractPostgresIT {
                 .andExpect(jsonPath("$.isLocked", is(true)))
                 .andExpect(jsonPath("$.opponentIsLocked", is(false)));
 
+        // One player locking must not reveal their formation to the still-planning opponent.
+        MvcResult planningState = mockMvc.perform(get("/api/games/" + game.gameId() + "/state")
+                        .header("Authorization", "Bearer " + game.bobToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state", is("PREPARATION")))
+                .andExpect(jsonPath("$.combatUnits", hasSize(0)))
+                .andReturn();
+        assertThat(planningState.getResponse().getContentAsString()).doesNotContain(unitId);
+
         MvcResult bobBuy = mockMvc.perform(post("/api/games/" + game.gameId() + "/rounds/1/buy")
                         .header("Authorization", "Bearer " + game.bobToken())
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -313,8 +322,14 @@ class CommandServiceIT extends AbstractPostgresIT {
         List<String> bobShop = shopUnitTypes(bobState);
         assertThat(aliceShop).containsExactlyElementsOf(aliceOffers);
         assertThat(bobShop).containsExactlyElementsOf(bobOffers);
-        // Opponent board never exposed as yourBoard for Bob (Alice's unit is not Bob's board).
-        assertThat(bobState.getResponse().getContentAsString()).doesNotContain(unitId);
+        // Personal planning fields remain viewer-only; locked formations are shared separately.
+        JsonNode bobJson = objectMapper.readTree(bobState.getResponse().getContentAsString());
+        assertThat(bobJson.path("yourBoard").toString()).doesNotContain(unitId);
+        assertThat(bobJson.path("yourUnits").has(unitId)).isFalse();
+        assertThat(bobJson.path("yourLane").toString()).doesNotContain(unitId);
+        List<String> combatIds = new java.util.ArrayList<>();
+        bobJson.path("combatUnits").forEach(unit -> combatIds.add(unit.path("id").asText()));
+        assertThat(combatIds).containsExactlyInAnyOrder(unitId, bobUnitId);
     }
 
     @Test
