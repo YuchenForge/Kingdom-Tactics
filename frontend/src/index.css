@@ -16,3 +16,28 @@ button:disabled { opacity: .55; cursor: wait; }
 [role="alert"] { color: var(--kt-danger); }
 .eyebrow { color: var(--kt-gold); }
 @media (max-width: 680px) { main { margin: 1rem; padding: 1.3rem; } }
+
+/* Shared account, lobby, and replay-entry actions. */
+.primary-action { display:inline-flex; align-items:center; justify-content:center; background:var(--kt-friendly); color:var(--kt-bg); border:1px solid var(--kt-friendly); font-weight:600; text-decoration:none; border-radius:6px; padding:.65rem 1rem; }
+.primary-action:hover { background:var(--kt-selected); }
+button.text-action { background:transparent; border:0; color:var(--kt-muted); font-size:13px; padding:6px 0; }
+button.text-action:hover { color:var(--kt-text); text-decoration:underline; }
+.match-details { color:var(--kt-muted); font-size:11px; margin:8px 0 24px; overflow-wrap:anywhere; }
+.match-details summary { cursor:pointer; width:fit-content; }
+.landing-logo { width:64px; height:64px; margin-bottom:16px; }
+.landing-page { max-width:800px; box-sizing:border-box; }
+.split-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.split-actions .create-action,.split-actions form { margin:0; padding:20px; background:var(--kt-bg); border:1px solid var(--kt-border); border-radius:8px; }
+.split-actions h2 { font-size:18px; font-weight:600; }
+.split-actions p { color:var(--kt-muted); font-size:13px; margin:8px 0 16px; }
+.split-actions label { font-size:12px; } .split-actions input { box-sizing:border-box; }
+.split-actions > [role="alert"] { grid-column:1/-1; }
+.lobby-players { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:24px 0; }
+.lobby-players article { padding:20px; text-align:center; background:var(--kt-bg); border:1px solid var(--kt-border); border-radius:8px; }
+.lobby-players img { width:56px; height:56px; margin:0 auto 12px; }
+.lobby-players h2 { font-weight:600; } .lobby-players p { overflow-wrap:anywhere; margin:8px 0; }
+.lobby-players span { font-size:12px; color:var(--kt-muted); } .lobby-players .player-ready { color:var(--kt-friendly); }
+.invite-actions { display:flex; align-items:end; gap:10px; margin:20px 0; }
+.invite-actions label { flex:1; min-width:0; margin:0; font-size:12px; }
+.invite-actions input { box-sizing:border-box; } .invite-actions button { flex-shrink:0; margin:0; }
+@media(max-width:600px) { .split-actions { grid-template-columns:1fr; } .invite-actions { flex-direction:column; align-items:stretch; } .lobby-players article { padding:12px; } }

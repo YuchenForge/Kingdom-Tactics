@@ -79,11 +79,10 @@ it('enforces board cap for lane units, allows board moves, and raises cap in rou
   expect(screen.getByText('Deployed · 3 / 5')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Select Squire b1' })).toHaveAttribute('aria-pressed', 'false')
 })
-it('confirms lock and clears selection after success', async () => {
+it('locks on the first click and clears selection after success', async () => {
   render(page()); fireEvent.click(screen.getByRole('button', { name: 'Select Squire u1' }))
   fireEvent.click(screen.getByRole('button', { name: 'Lock board' }))
-  expect(api.lock).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: 'Confirm lock' }))
+  expect(screen.queryByRole('dialog', { name: 'Confirm lock' })).not.toBeInTheDocument()
   expect(api.lock).toHaveBeenCalledTimes(1)
   await screen.findByText('Select a unit, then choose an empty destination.')
 })

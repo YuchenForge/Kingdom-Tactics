@@ -13,7 +13,7 @@ import type { GameOverview, GameState } from './types'
 vi.mock('./api/gameApi', async (importOriginal) => ({
   ...await importOriginal<typeof import('./api/gameApi')>(),
   me: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn(),
-  createGame: vi.fn(), joinGame: vi.fn(), getGame: vi.fn(), getState: vi.fn(), getRoundResult: vi.fn(),
+  createGame: vi.fn(), joinGame: vi.fn(), getGame: vi.fn(), getState: vi.fn(), getRoundResult: vi.fn(), getMatchResult: vi.fn(),
 }))
 const user = { userId: 'u1', username: 'Alice', email: 'a@example.com', rating: 1000, createdAt: '' }
 const game: GameOverview = { gameId: 'g1', state: 'WAITING_FOR_PLAYERS', currentRound: 1,
@@ -48,6 +48,7 @@ beforeEach(() => {
   vi.mocked(api.register).mockImplementation(async () => {
     setAuthToken('jwt'); return { userId: 'u1', username: 'Alice', token: 'jwt' }
   })
+  vi.mocked(api.getMatchResult).mockResolvedValue({ gameId: 'g1', state: 'FINISHED', winnerId: 'u1', winnerUsername: 'Alice', loserUsername: 'Bob', finalKeepHp: [12, 0], finalRound: 3, durationSeconds: 125, finishedAt: '2026-10-01T12:00:00Z' })
   vi.mocked(api.getGame).mockResolvedValue(game)
   vi.mocked(api.getState).mockResolvedValue(state)
   vi.mocked(api.createGame).mockResolvedValue(game)
@@ -147,11 +148,13 @@ describe('auth and lobby routes', () => {
     await screen.findByRole('heading', { name: 'Game board' })
     expect(api.joinGame).toHaveBeenCalledExactlyOnceWith('g1')
   })
-  it('opens finished games on the result stub and creates a new game', async () => {
+  it('opens finished games on the result page and creates a new game', async () => {
     setAuthToken('jwt')
     vi.mocked(api.getGame).mockResolvedValue({ ...game, state: 'FINISHED' })
     renderApp('/games/g1')
-    await screen.findByRole('heading', { name: 'Match result' })
+    await screen.findByRole('heading', { name: 'Victory' })
+    expect(screen.getByText('Ended in round 3 of 8')).toBeInTheDocument()
+    expect(screen.getByText('Opponent: 0 HP')).toBeInTheDocument()
     vi.mocked(api.createGame).mockResolvedValue({ ...game, gameId: 'g2' })
     vi.mocked(api.getGame).mockResolvedValue({ ...game, gameId: 'g2' })
     fireEvent.click(screen.getByRole('button', { name: 'New game' }))
@@ -223,5 +226,51 @@ describe('owned navigation paths', () => {
     expect(inviteDestination('g1')).toBe('/join/g1')
     expect(inviteDestination(`${window.location.origin}/join/g1`)).toBe('/join/g1')
     expect(inviteDestination('https://evil.example/join/g1')).toBeNull()
+  })
+})
+
+
+describe('match results', () => {
+  it.each([
+    ['u1', 'Victory'], ['u2', 'Defeat'], [null, 'Draw'],
+  ])('shows the server outcome for winner %s after a direct result-page load', async (winnerId, heading) => {
+    setAuthToken('jwt')
+    vi.mocked(api.getMatchResult).mockResolvedValue({ gameId: 'g1', state: 'FINISHED', winnerId,
+      winnerUsername: winnerId ? 'Winner' : null, loserUsername: winnerId ? 'Loser' : null,
+      finalKeepHp: [12, 12], finalRound: 8, durationSeconds: 125, finishedAt: '' })
+    renderApp('/games/g1/result')
+    await screen.findByRole('heading', { name: heading! })
+    expect(api.getMatchResult).toHaveBeenCalledWith('g1')
+    expect(screen.getByText('Ended in round 8 of 8')).toBeInTheDocument()
+    expect(screen.getByText('Duration: 2m 5s')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Game id or invite link'), { target: { value: 'g2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Join game' }))
+    await waitFor(() => expect(api.joinGame).toHaveBeenCalledWith('g2'))
+  })
+  it('can retry a failed result request', async () => {
+    setAuthToken('jwt')
+    const result = await api.getMatchResult('g1')
+    vi.mocked(api.getMatchResult).mockRejectedValueOnce(new ApiError(0, 'NETWORK_ERROR', 'Connection lost'))
+    renderApp('/games/g1/result')
+    await screen.findByText('Connection lost')
+    vi.mocked(api.getMatchResult).mockResolvedValue(result)
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await screen.findByRole('heading', { name: 'Victory' })
+  })
+  it('handles an unfinished match without displaying an outcome', async () => {
+    setAuthToken('jwt')
+    vi.mocked(api.getMatchResult).mockRejectedValue(new ApiError(409, 'WRONG_GAME_STATE', 'Not finished'))
+    renderApp('/games/g1/result')
+    await screen.findByText('This match is still in progress.')
+    expect(screen.getByRole('link', { name: 'Return to game' })).toHaveAttribute('href', '/games/g1/play')
+    expect(screen.queryByRole('region', { name: 'Final match outcome' })).not.toBeInTheDocument()
+  })
+  it('expires a rejected result request with its return path preserved', async () => {
+    setAuthToken('jwt')
+    vi.mocked(api.getMatchResult).mockRejectedValue(new ApiError(401, 'UNAUTHORIZED', 'Expired'))
+    renderApp('/games/g1/result')
+    await screen.findByRole('heading', { name: 'Log in' })
+    expect(getAuthToken()).toBeNull()
+    expect(screen.getByTestId('location')).toHaveTextContent('/auth?next=%2Fgames%2Fg1%2Fresult')
   })
 })

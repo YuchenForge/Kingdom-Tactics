@@ -1,3 +1,5 @@
+import { abilityDescription } from '../lib/abilityDescription'
+import InterfaceIcon from './InterfaceIcon'
 import UnitPopup from './UnitPopup'
 import { useEffect, useRef, useState } from 'react'
 import type { RelocateDestination, UnitView, GameState } from '../types'
@@ -29,7 +31,7 @@ export default function PlanningControls({ state, selected, inspected, reason, o
         const disabled = reason || (!offer?.unitType ? 'Offer already sold' : state.yourGold < offer.cost ? 'Not enough gold' : occupied >= 5 ? 'Lane full' : '')
         return <article className="shop-card" key={slot}>
           <h3>{offer?.unitType || 'Sold'}</h3>{offer?.unitType && art(offer.unitType) && <img className="offer-art" src={art(offer.unitType)} alt="" />}
-          {offer?.unitType && <><p>{offer.cost} gold</p><p>HP {offer.maxHp} · Attack {offer.attack} · Range {offer.range}</p><p>{offer.specialAbility || 'No special ability'} · Healing {offer.healAmount}</p></>}
+          {offer?.unitType && <><p>{offer.cost} gold</p><p>HP {offer.maxHp} · Attack {offer.attack} · Range {offer.range}</p><p>{abilityDescription(offer.specialAbility, offer.healAmount)}</p></>}
           <button disabled={!!disabled} aria-describedby={`shop-reason-${slot}`} onClick={() => onAction({ type: 'buy', slot })}>Buy slot {slot + 1}</button>
           <small id={`shop-reason-${slot}`}>{disabled}</small>
         </article>
@@ -45,7 +47,7 @@ export default function PlanningControls({ state, selected, inspected, reason, o
           disabled={!!id || !!destinationReason} aria-label={`Lane slot ${slot + 1}`} title={destinationReason}
           onClick={() => selected && onAction({ type: 'relocate', id: selected, to: { type: 'LANE', slot } })}>{id ? 'Loading unit…' : 'Empty'}</button>}</div>
       })}
-    </div></div>
+    </div><div className="formation-actions"><button onClick={() => setShopOpen(!shopOpen)} aria-expanded={shopOpen}><InterfaceIcon name="unit-cap" />Recruit</button><button disabled={!!reason} onClick={onLock}><InterfaceIcon name="lock" />Lock board</button><small>{reason}</small></div></div>
       {selected && !onBoard && deployed >= cap && <p className="board-cap-message">Board at cap. Move a deployed unit to the lane or sell one first.</p>}
     </section>
     <section className="formation" aria-label="Your board"><h2>Deployed · {deployed} / {cap}</h2>
@@ -64,7 +66,7 @@ export default function PlanningControls({ state, selected, inspected, reason, o
         </div>)}
       </div>
     </section>
-    <div className="formation-actions"><button onClick={() => setShopOpen(!shopOpen)} aria-expanded={shopOpen}>Recruit</button><button disabled={!!reason} onClick={onLock}>Lock board</button><small>{reason}</small></div>
+
   </div>
 }
 
@@ -89,13 +91,13 @@ function PlanningUnitTile({ unit, selected, inspected, reason, onSelect, onInspe
       <button className="inspect" aria-label={`Inspect ${unit.unitType} ${unit.id}`} aria-expanded={opened}
         onClick={() => onInspect(opened ? null : { id: unit.id, mode: 'inspect' })}>Inspect</button>
       {opened && <UnitPopup anchor={anchor} label={`${unit.unitType} details`} onEnter={cancelClose} onLeave={leave} onClose={() => onInspect(null)}>
-        <strong>{unit.unitType} · Level {unit.level}</strong>
-        <p>HP {unit.maxHp} · Attack {unit.attack} · Range {unit.range}</p>
-        <p>Special: {unit.specialAbility || 'None'} · Healing: {unit.healAmount}</p>
-        <p>Sell refund: {unit.sellRefund} gold</p>
-        <button disabled={!!reason} onClick={() => onAction({ type: 'sell', id: unit.id })}>Sell for {unit.sellRefund} gold</button>
+        <div className="popup-heading"><strong>{unit.unitType}</strong><span>Level {unit.level}</span></div>
+        <div className="popup-stats"><span><InterfaceIcon name="keep-hp" />HP <b>{unit.maxHp}</b></span><span>ATK <b>{unit.attack}</b></span><span>Range <b>{unit.range}</b></span></div>
+        <p>{abilityDescription(unit.specialAbility, unit.healAmount)}</p>
+        <p className="popup-note">Full HP at combat start</p>
+        <span className="visually-hidden">Sell refund: {unit.sellRefund} gold</span>
+        <div className="popup-actions"><button className="sell-action" aria-label={`Sell for ${unit.sellRefund} gold`} disabled={!!reason} onClick={() => onAction({ type: 'sell', id: unit.id })}><InterfaceIcon name="sell" />Sell · +{unit.sellRefund} gold</button><button aria-label="Close details" onClick={() => onInspect(null)}>Close</button></div>
         {reason && <small>{reason}</small>}
-        <button onClick={() => onInspect(null)}>Close details</button>
       </UnitPopup>}
     </div>
   }

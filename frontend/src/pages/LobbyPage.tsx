@@ -32,18 +32,21 @@ export default function LobbyPage() {
     const timer = window.setTimeout(() => setCopied(false), 2000)
     return () => window.clearTimeout(timer)
   }, [copied])
-  return <main><Link to="/">Home</Link><h1>Game lobby</h1><p>Game id: {gameId}</p>
+  return <main className="lobby-page"><Link to="/">Home</Link><h1>Game lobby</h1><details className="match-details"><summary>Match details</summary><p>Game id: {gameId}</p></details>
     {query.isPending && <p role="status">Loading game…</p>}
     {query.error && <p role="alert">{query.error instanceof ApiError ? query.error.message : 'Reconnecting…'}</p>}
-    {query.data && <><ul>{query.data.players.map((player) => <li key={player.playerId}>{player.username}</li>)}</ul>
-      {query.data.state === 'WAITING_FOR_PLAYERS' && <p role="status">Waiting for opponent…</p>}</>}
+    {query.data && <><div className="lobby-players">
+      <article><img src="/assets/keep/keep.svg" alt="" /><h2>You</h2><p>{auth.user?.username ?? 'Player'}</p><span className="player-ready">Ready</span></article>
+      <article><img src="/assets/keep/keep.svg" alt="" /><h2>Opponent</h2><p>{query.data.players.find(player => player.playerId !== auth.user?.userId)?.username ?? 'Invite a friend'}</p><span>{query.data.players.length > 1 ? 'Ready' : 'Waiting'}</span></article>
+    </div>{query.data.state === 'WAITING_FOR_PLAYERS' && <p role="status">Waiting for opponent…</p>}</>}
+    <div className="invite-actions">
     <label>Invite link<input ref={input} readOnly value={invite} /></label>
-    <button onClick={async () => {
+    <button className="primary-action" onClick={async () => {
       setCopyError('')
       try { await navigator.clipboard.writeText(invite); setCopied(true) }
       catch { input.current?.focus(); input.current?.select(); setCopyError('Copy the selected invite link manually.') }
-    }}>{copied ? 'Copied' : 'Copy invite link'}</button>
+    }}>{copied ? 'Copied' : 'Copy invite link'}</button></div>
     {copyError && <p role="status">{copyError}</p>}
-    <button onClick={auth.logout}>Log out</button>
+    <button className="text-action" onClick={auth.logout}>Log out</button>
   </main>
 }

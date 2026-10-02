@@ -5,7 +5,7 @@ import { ApiError } from '../api/client'
 import { useAuth } from '../hooks/useAuth'
 import { inviteDestination } from '../lib/navigation'
 
-export default function GameActions() {
+export default function GameActions({ split = false }: { split?: boolean }) {
   const auth = useAuth()
   const navigate = useNavigate()
   const busyRef = useRef(false)
@@ -25,16 +25,18 @@ export default function GameActions() {
       else setError(failure instanceof ApiError ? failure.message : 'Could not create a game.')
     } finally { busyRef.current = false; setBusy(false) }
   }
-  return <section aria-label="Play with a friend">
-    <button disabled={busy} onClick={() => void create()}>{busy ? 'Creating…' : 'New game'}</button>
+  return <section className={split ? "game-actions split-actions" : "game-actions"} aria-label="Play with a friend">
+    <div className="create-action">{split && <><h2>Create a match</h2><p>Open a lobby and invite a friend.</p></>}
+    <button className="primary-action" disabled={busy} onClick={() => void create()}>{busy ? 'Creating…' : 'New game'}</button></div>
     <form onSubmit={(event) => {
       event.preventDefault()
       const destination = inviteDestination(invite)
       if (destination) navigate(destination)
       else setError('Enter a game id or an invite link from this site.')
     }}>
+      {split && <><h2>Join a friend</h2><p>Paste their invite link or game id.</p></>}
       <label>Game id or invite link<input value={invite} onChange={(event) => setInvite(event.target.value)} required /></label>
-      <button type="submit">Join game</button>
+      <button className="primary-action" type="submit">Join game</button>
     </form>
     {error && <p role="alert">{error}</p>}
   </section>
