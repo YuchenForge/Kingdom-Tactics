@@ -197,8 +197,9 @@ public class CombatEngine {
         if ("Mage".equals(attacker.getType()) && attacker.isTriggerSpecialAction()) {
             int[][] directions = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
             for (int[] dir : directions) {
-                int splashX = attacker.getX() + dir[0];
-                int splashY = attacker.getY() + dir[1];
+                // Splash surrounds the impact tile, even if the direct hit killed its target.
+                int splashX = target.getX() + dir[0];
+                int splashY = target.getY() + dir[1];
 
                 if (!CombatBoard.isValidPosition(splashX, splashY)) {
                     continue;

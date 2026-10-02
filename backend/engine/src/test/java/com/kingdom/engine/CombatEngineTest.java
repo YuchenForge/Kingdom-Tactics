@@ -80,6 +80,30 @@ class CombatEngineTest {
     }
 
     @Test
+    void mageSplash_centersOnDistantTarget_evenWhenDirectHitKillsIt() {
+        // Long range and high HP keep fixtures stationary until the third attack.
+        UnitDefinition mage = new UnitDefinition("Mage", 3, new int[]{100,100,100}, new int[]{6,6,6}, 8, "SplashEvery3rdAttack");
+        UnitDefinition target = new UnitDefinition("Squire", 1, new int[]{16,16,16}, new int[]{1,1,1}, 8, "None");
+        UnitDefinition armored = new UnitDefinition("Shieldbearer", 2, new int[]{100,100,100}, new int[]{1,1,1}, 8, "Armor");
+        Board ours = board(0, unit("mage", mage, 3, 0), unit("ally", armored, 1, 0));
+        Board theirs = board(1, unit("target", target, 2, 1),
+                unit("neighbor", armored, 3, 1), unit("diagonal", armored, 3, 2),
+                unit("near-mage", armored, 0, 0));
+        ResolutionResult result = new CombatEngine(1L).resolve(ours, theirs, 12);
+        List<CombatEvent> hits = result.getEvents().stream()
+                .filter(e -> e.getType() == CombatEvent.EventType.ATTACK)
+                .filter(e -> "mage".equals(e.getData().get("attackerId")))
+                .collect(Collectors.toList());
+        assertThat(hits.stream().filter(e -> e.getTick() == 3).count()).isEqualTo(1);
+        assertThat(hits.stream().filter(e -> e.getTick() == 7).count()).isEqualTo(1);
+        assertThat(hits.stream().filter(e -> e.getTick() == 11)
+                .map(e -> e.getData().get("targetId"))).containsExactlyInAnyOrder("target", "neighbor");
+        assertThat(hits.stream().filter(e -> "neighbor".equals(e.getData().get("targetId")))
+                .map(e -> e.getData().get("damage"))).containsExactly(6);
+        assertThat(result.getFinalBoard().getUnit("target")).isNull();
+    }
+
+    @Test
     void scenario_1_squire_vs_squire() {
         // Local (2,0) → combat (1,3); P1 local (1,2) → combat (1,6); seed 12345
         ResolutionResult result = new CombatEngine(12345L).resolve(
