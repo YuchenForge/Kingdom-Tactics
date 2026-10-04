@@ -5,6 +5,7 @@ import com.kingdom.api.dto.CombatUnitDto;
 import com.kingdom.engine.domain.Coordinates;
 import java.util.ArrayList;
 import com.kingdom.api.dto.GameStateResponse;
+import com.kingdom.api.dto.CombatPresentationDto;
 import com.kingdom.api.entity.Game;
 import com.kingdom.api.entity.GamePlayer;
 import com.kingdom.api.entity.GameStates;
@@ -217,6 +218,8 @@ public class GameService {
 
         return new GameStateResponse(
                 game.getId(),
+                clock.instant(),
+                combatPresentation(game.getState(), round),
                 game.getState(),
                 game.getCurrentRound(),
                 latestResolvedRound,
@@ -233,6 +236,15 @@ public class GameService {
                 yourPlan.isLocked(),
                 opponentPlan.isLocked(),
                 combatUnits(game.getState(), yourState, you.getSeat(), opponentState, opponent.getSeat()));
+    }
+
+    private static CombatPresentationDto combatPresentation(String phase, Round round) {
+        // Preserve an expired schedule until TX3 changes phase; never restart it on a poll.
+        if (!GameStates.ROUND_RESULT.equals(phase) || round.getPresentationStartsAt() == null) {
+            return null;
+        }
+        return new CombatPresentationDto(round.getRoundNumber(), round.getPresentationStartsAt(),
+                round.getCombatEndsAt(), round.getPresentationEndsAt(), round.getTickDurationMs());
     }
 
     static List<CombatUnitDto> combatUnits(String phase, PlanningState yours, int yourSeat,

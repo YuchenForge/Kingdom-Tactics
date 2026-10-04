@@ -384,6 +384,37 @@ class GameServiceTest {
         verify(planningDeadlineService).autoLockIfDeadlinePassed(gameId);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "PREPARATION,true", "LOCKED,true", "RESOLVING,true", "FINISHED,true",
+            "ROUND_RESULT,false", "ROUND_RESULT,true"
+    })
+    void getState_exposesPersistedTimingOnlyForScheduledRoundResults(String phase, boolean scheduled) {
+        UUID roundId = UUID.randomUUID();
+        Game game = twoPlayerGame(phase, 2);
+        Round round = new Round(gameId, 2, phase, FIXED_NOW.plusSeconds(45));
+        ReflectionTestUtils.setField(round, "id", roundId);
+        // Already expired: GET must return the stored schedule, never extend or hide it.
+        Instant startsAt = FIXED_NOW.minusSeconds(10);
+        if (scheduled) round.setCombatPresentation(startsAt, startsAt.plusSeconds(5),
+                startsAt.plusSeconds(7), 250);
+        stubParticipantState(game, round, new GamePlayer(gameId, creatorId, 0),
+                new GamePlayer(gameId, joinerId, 1), true, true);
+        when(roundRepository.findLatestResolvedRoundNumber(gameId)).thenReturn(Optional.of(1));
+
+        GameStateResponse response = gameService.getState(gameId, creatorId);
+        assertThat(response.serverTime()).isEqualTo(FIXED_NOW);
+        if (GameStates.ROUND_RESULT.equals(phase) && scheduled) {
+            assertThat(response.combatPresentation()).isEqualTo(new com.kingdom.api.dto.CombatPresentationDto(
+                    2, startsAt, startsAt.plusSeconds(5), startsAt.plusSeconds(7), 250));
+            assertThat(gameService.getState(gameId, creatorId).combatPresentation())
+                    .isEqualTo(response.combatPresentation());
+        } else {
+            assertThat(response.combatPresentation()).isNull();
+        }
+        verify(roundRepository, never()).save(any());
+    }
+
     @Test
     void getGame_whenPreparation_attemptsDeadlineFinalize() {
         Game locked = waitingGame(creatorId);

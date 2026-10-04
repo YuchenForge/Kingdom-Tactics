@@ -7,6 +7,8 @@ import java.util.UUID;
 
 public record GameStateResponse(
         UUID gameId,
+        Instant serverTime, // response assembly time for client clock alignment
+        CombatPresentationDto combatPresentation, // null outside ROUND_RESULT or for legacy results
         String state,
         int currentRound,
         Integer latestResolvedRound, // null until first TX 2

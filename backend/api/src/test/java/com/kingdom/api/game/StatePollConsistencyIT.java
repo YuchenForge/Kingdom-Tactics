@@ -130,6 +130,7 @@ class StatePollConsistencyIT extends AbstractPostgresIT {
             assertCoherentTx2Transition(response);
             // Mid-assemble TX2 must stay on the pre-commit snapshot under RR.
             assertThat(response.state()).isEqualTo(GameStates.RESOLVING);
+            assertThat(response.combatPresentation()).isNull();
             assertThat(response.yourKeepHp()).isEqualTo(PRE_TX2_KEEP);
         } finally {
             pool.shutdownNow();
@@ -171,6 +172,7 @@ class StatePollConsistencyIT extends AbstractPostgresIT {
             assertThat(response.state()).isEqualTo(GameStates.ROUND_RESULT);
             assertThat(response.currentRound()).isEqualTo(1);
             assertThat(response.yourGold()).isEqualTo(ROUND1_GOLD);
+            assertThat(response.combatPresentation().roundNumber()).isEqualTo(1);
         } finally {
             pool.shutdownNow();
         }
@@ -191,6 +193,24 @@ class StatePollConsistencyIT extends AbstractPostgresIT {
         assertThat(roundResult.path("latestResolvedRound").asInt()).isEqualTo(1);
         assertThat(roundResult.path("yourGold").asInt()).isEqualTo(ROUND1_GOLD);
 
+        Instant beforePoll = Instant.now();
+        JsonNode repeated = pollState(game);
+        assertThat(Instant.parse(repeated.path("serverTime").asText()))
+                .isBetween(beforePoll, Instant.now());
+        assertThat(repeated.path("combatPresentation")).isEqualTo(roundResult.path("combatPresentation"));
+        Round saved = roundRepository.findByGameIdAndRoundNumber(UUID.fromString(game.gameId()), 1).orElseThrow();
+        var timing = toResponse(roundResult).combatPresentation();
+        assertThat(timing.roundNumber()).isEqualTo(1);
+        assertThat(timing.startsAt()).isEqualTo(saved.getPresentationStartsAt());
+        assertThat(timing.combatEndsAt()).isEqualTo(saved.getCombatEndsAt());
+        assertThat(timing.endsAt()).isEqualTo(saved.getPresentationEndsAt());
+        assertThat(timing.tickDurationMs()).isEqualTo(250);
+        MvcResult bobPoll = mockMvc.perform(get("/api/games/" + game.gameId() + "/state")
+                        .header("Authorization", "Bearer " + game.bobToken()))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(objectMapper.readTree(bobPoll.getResponse().getContentAsString()).path("combatPresentation"))
+                .isEqualTo(roundResult.path("combatPresentation"));
+
         advanceToRound2(game);
         JsonNode preparation = pollState(game);
         assertThat(preparation.path("state").asText()).isEqualTo(GameStates.PREPARATION);
@@ -199,6 +219,8 @@ class StatePollConsistencyIT extends AbstractPostgresIT {
         assertThat(preparation.path("latestResolvedRound").asInt()).isEqualTo(1);
         assertThat(preparation.path("yourKeepHp").asInt()).isEqualTo(POST_TX2_KEEP_ALICE);
         assertThat(preparation.path("shop")).isNotEmpty();
+        assertThat(preparation.path("combatPresentation").isNull()).isTrue();
+        assertThat(resolving.path("combatPresentation").isNull()).isTrue();
     }
 
     private static void assertCoherentTx2Transition(GameStateResponse response) {
@@ -276,6 +298,8 @@ class StatePollConsistencyIT extends AbstractPostgresIT {
         round.setOutcome(CombatOutcome.ENEMY_VICTORY.name());
         round.setKeepDamage(Map.of("0", 2, "1", 3));
         round.setFinishedAt(Instant.now());
+        Instant startsAt = Instant.now().plusSeconds(1);
+        round.setCombatPresentation(startsAt, startsAt.plusMillis(1250), startsAt.plusMillis(3250), 250);
         roundRepository.saveAndFlush(round);
 
         List<GamePlayer> seats = gamePlayerRepository.findByGameIdOrderBySeatAsc(gameId);
