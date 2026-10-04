@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AUTH_TOKEN_STORAGE_KEY } from './client'
 import {
-  buy, createGame, getGame, getMatchResult, getRoundResult, getState,
+  getCombatEventsPage, buy, createGame, getGame, getMatchResult, getRoundResult, getState,
   isWrongGameState, joinGame, lock, login, logout, matchesActiveRound, me,
   newIdempotencyKey, refresh, register, relocate, sell,
 } from './gameApi'
@@ -168,4 +168,21 @@ describe('gameApi', () => {
       expect(isWrongGameState(error)).toBe(false)
     }
   })
+})
+
+it('loads an authorized event page and forwards cancellation', async () => {
+  localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'jwt')
+  const controller = new AbortController()
+  const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ roundNumber: 2, events: [], nextAfterSequence: 200, hasMore: false, complete: true }))
+  vi.stubGlobal('fetch', fetchMock)
+  try {
+    await getCombatEventsPage('g', 2, 200, controller.signal)
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/games/g/events?round=2&afterSequence=200&limit=200')
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer jwt')
+    expect(init.signal).toBe(controller.signal)
+    controller.abort()
+    fetchMock.mockRejectedValue(controller.signal.reason)
+    await expect(getCombatEventsPage('g', 2, 200, controller.signal)).rejects.toHaveProperty('name', 'AbortError')
+  } finally { vi.unstubAllGlobals(); localStorage.clear() }
 })

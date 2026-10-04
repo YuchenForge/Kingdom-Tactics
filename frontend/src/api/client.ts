@@ -90,6 +90,7 @@ export type ApiRequestOptions = {
   headers?: Record<string, string>
   /** Defaults to true. Set false for register/login. */
   auth?: boolean
+  signal?: AbortSignal
 }
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
@@ -116,9 +117,11 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     response = await fetch(`${apiBaseUrl()}${path}`, {
       method,
       headers,
+      signal: options.signal,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     })
-  } catch {
+  } catch (error) {
+    if (options.signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) throw error
     throw new ApiError(0, 'NETWORK_ERROR', 'Could not reach the server.')
   }
 

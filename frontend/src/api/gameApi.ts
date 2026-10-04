@@ -1,3 +1,4 @@
+import type { CombatEventsPage } from '../types/combat'
 import { ApiError, apiRequest, assertPasswordUtf8Limit, setAuthToken } from './client'
 import type {
   AuthResponse,
@@ -140,4 +141,12 @@ export function relocate(
 
 export function lock(gameId: string, roundNumber: number, key: string): Promise<CommandResult> {
   return planningCommand('lock', gameId, roundNumber, key)
+}
+
+/** Participant-only recorded events; afterSequence is exclusive and starts at zero. */
+export function getCombatEventsPage(
+  gameId: string, round: number, afterSequence = 0, signal?: AbortSignal,
+): Promise<CombatEventsPage> {
+  const params = new URLSearchParams({ round: String(round), afterSequence: String(afterSequence), limit: '200' })
+  return apiRequest<CombatEventsPage>(`/games/${encodeURIComponent(gameId)}/events?${params}`, { signal })
 }

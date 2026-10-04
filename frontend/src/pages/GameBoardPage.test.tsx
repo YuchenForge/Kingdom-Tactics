@@ -21,7 +21,7 @@ beforeEach(() => {
   state = { gameId: 'g', state: 'PREPARATION', currentRound: 1, latestResolvedRound: null, yourSeat: 0, yourGold: 10, yourKeepHp: 20, opponentKeepHp: 20, opponentUnitCount: 0,
     yourBoard: Array.from({ length: 4 }, () => Array(4).fill(null)), yourUnits: { u1: unit }, yourLane: [{ slot: 0, unitId: 'u1', unitType: 'Squire', level: 2 }],
     shop: [{ slot: 0, unitType: 'Squire', cost: 3, maxHp: 20, attack: 4, range: 1, specialAbility: null, healAmount: 0 }], isLocked: false, opponentIsLocked: false, planningDeadline: '2026-10-01T12:00:00Z' }
-  hook = { state, canMutate: true, isLoading: false, isReconnecting: false, error: null, phase: 'PREPARATION', roundResult: undefined, roundResultError: null, isResolving: false, showDeadline: true,
+  hook = { combatRecording: undefined, combatEventsError: null, isLoadingCombatEvents: false, retryCombatEvents: vi.fn(), state, canMutate: true, isLoading: false, isReconnecting: false, error: null, phase: 'PREPARATION', roundResult: undefined, roundResultError: null, isResolving: false, showDeadline: true,
     refetch: vi.fn(), invalidate: vi.fn(), onCommandSuccess: vi.fn().mockResolvedValue(true), onCommandError: vi.fn().mockResolvedValue(false) }
   update()
   for (const fn of [api.buy, api.sell, api.relocate, api.lock, api.refresh]) vi.mocked(fn).mockResolvedValue(response)

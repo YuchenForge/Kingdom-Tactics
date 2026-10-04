@@ -5,6 +5,7 @@ import { ApiError } from '../api/client'
 import { getRoundResult, getState, isWrongGameState, matchesActiveRound } from '../api/gameApi'
 import type { CommandResult, GameState } from '../types'
 import { useAuth } from './useAuth'
+import { useCombatEvents } from './useCombatEvents'
 
 function hardFailure(error: unknown) {
   return error instanceof ApiError && [401, 403, 404].includes(error.status)
@@ -46,9 +47,13 @@ export function useGameState(gameId: string | undefined) {
     staleTime: Infinity,
     retry: (count, error) => !hardFailure(error) && count < 1,
   })
+  const eventRound = state?.state === 'ROUND_RESULT' && !hardFailure(query.error) && !notReady(query.error)
+    ? state.combatPresentation?.roundNumber ?? (state.latestResolvedRound === state.currentRound ? state.currentRound : null)
+    : null
+  const eventsQuery = useCombatEvents(gameId, eventRound)
   const handled = useRef('')
   useEffect(() => {
-    const unauthorized = [query.error, resultQuery.error].some((error) => error instanceof ApiError && error.status === 401)
+    const unauthorized = [query.error, resultQuery.error, eventsQuery.error].some((error) => error instanceof ApiError && error.status === 401)
     const target = unauthorized ? 'auth'
       : notReady(query.error) || (!query.error && state?.state === 'WAITING_FOR_PLAYERS') ? 'lobby'
       : !query.error && state?.state === 'FINISHED' ? 'result' : ''
@@ -58,7 +63,7 @@ export function useGameState(gameId: string | undefined) {
     handled.current = action
     if (target === 'auth') auth.expire()
     else navigate(`/games/${encodeURIComponent(gameId)}${target === 'result' ? '/result' : ''}`, { replace: true })
-  }, [query.error, resultQuery.error, state?.state, gameId, navigate, auth])
+  }, [query.error, resultQuery.error, eventsQuery.error, state?.state, gameId, navigate, auth])
 
   function invalidate() {
     if (!mounted.current || !gameId || activeGame.current !== gameId) return Promise.resolve()
@@ -84,6 +89,10 @@ export function useGameState(gameId: string | undefined) {
     state,
     phase: state?.state,
     roundResult: resultQuery.data,
+    combatRecording: eventsQuery.data,
+    combatEventsError: eventsQuery.error,
+    isLoadingCombatEvents: eventRound != null && eventsQuery.isPending,
+    retryCombatEvents: eventsQuery.refetch,
     roundResultError: resultQuery.error,
     isLoading: !!gameId && query.isPending && !state,
     isReconnecting: query.isError && !hardFailure(query.error) && !notReady(query.error),

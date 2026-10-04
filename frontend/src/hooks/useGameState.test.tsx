@@ -11,7 +11,7 @@ const { navigate, expire } = vi.hoisted(() => ({ navigate: vi.fn(), expire: vi.f
 vi.mock('react-router', () => ({ useNavigate: () => navigate }))
 vi.mock('./useAuth', () => ({ useAuth: () => ({ expire }) }))
 vi.mock('../api/gameApi', async (original) => ({
-  ...await original<typeof import('../api/gameApi')>(), getState: vi.fn(), getRoundResult: vi.fn(),
+  ...await original<typeof import('../api/gameApi')>(), getState: vi.fn(), getRoundResult: vi.fn(), getCombatEventsPage: vi.fn(),
 }))
 const state: GameState = {
   gameId: 'g', state: 'PREPARATION', currentRound: 1, latestResolvedRound: null,
@@ -129,4 +129,15 @@ it('keeps polling when a round result fails and keeps locked planning read-only'
   expect(hook.result.current.roundResultError).toBeTruthy()
   expect(hook.result.current.canMutate).toBe(false)
   expect(vi.mocked(api.getState).mock.calls.length).toBeGreaterThan(1)
+})
+
+it('discovers a resolved recording without observing resolving and cancels on preparation', async () => {
+  vi.mocked(api.getState).mockResolvedValue({ ...state, state: 'ROUND_RESULT', latestResolvedRound: 1 })
+  vi.mocked(api.getCombatEventsPage).mockResolvedValue({ roundNumber: 1, events: [], complete: true, hasMore: false, nextAfterSequence: 0 })
+  const hook = setup(); await tick(50)
+  expect(hook.result.current.combatRecording?.roundNumber).toBe(1)
+  vi.mocked(api.getState).mockResolvedValue({ ...state, currentRound: 2, latestResolvedRound: 1 })
+  await tick(1100)
+  expect(hook.result.current.combatRecording).toBeUndefined()
+  expect(hook.result.current.roundResult).toEqual(outcome)
 })

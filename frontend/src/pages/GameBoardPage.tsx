@@ -86,6 +86,8 @@ export default function GameBoardPage() {
     {state && state.state === 'PREPARATION' && <PlanningControls state={state} selected={selected} inspected={inspection} reason={reason}
       onSelect={(unit) => setSelection({ id: unit.id, level: unit.level, gameId, round: state.currentRound })}
       onInspect={setInspection} onAction={act} onLock={() => act({ type: 'lock' })} />}
+    {game.isLoadingCombatEvents && <p role="status">Loading combat…</p>}
+    {game.combatEventsError && <p role="alert">Could not load combat. Live game updates continue. <button onClick={() => void game.retryCombatEvents()}>Retry combat loading</button></p>}
     {game.isResolving && <p role="status">Resolving…</p>}
     {result && <section aria-label="Last round result"><h2>Round {result.roundNumber} result</h2>
       <p>{result.outcome === 'DRAW' ? 'Draw' : result.outcome === 'TIME_LIMIT' ? 'Time limit reached' : (result.outcome === 'PLAYER_VICTORY') === (state?.yourSeat === 0) ? 'You won the round' : 'Opponent won the round'}</p>

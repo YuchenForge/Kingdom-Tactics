@@ -84,7 +84,18 @@ export type BoardGrid = (string | null)[][]
 
 export type CombatUnit = { id: string; type: string; level: number; seat: number; x: number; y: number }
 
+export type CombatPresentation = {
+  roundNumber: number
+  startsAt: string
+  combatEndsAt: string
+  endsAt: string
+  tickDurationMs: number
+}
+
 export type GameState = {
+  // Optional for cached responses from before Phase 6 API rollout.
+  serverTime?: string
+  combatPresentation?: CombatPresentation | null
   combatUnits?: CombatUnit[]
 
   gameId: string
