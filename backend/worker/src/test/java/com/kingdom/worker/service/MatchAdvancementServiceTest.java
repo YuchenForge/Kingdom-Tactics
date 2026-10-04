@@ -15,6 +15,8 @@ import com.kingdom.api.service.GameService;
 import com.kingdom.api.service.ShopService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -157,9 +159,22 @@ class MatchAdvancementServiceTest {
         verifyNoInteractions(userRepository);
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {1, 8})
+    void advance_beforeDeadline_doesNotReadOrMutateGame(int number) {
+        Round round = roundResult(number);
+        round.setCombatPresentation(NOW.minusSeconds(1), NOW, NOW.plusMillis(1), 250);
+        when(roundRepository.lockUnadvancedRoundResult(roundId)).thenReturn(Optional.of(round));
+
+        assertThat(service.advance(roundId)).isFalse();
+        assertThat(round.getAdvancedAt()).isNull();
+        verifyNoInteractions(gameRepository, gamePlayerRepository, roundPlanRepository, shopService, userRepository);
+    }
+
     private Round roundResult(int number) {
         Round round = new Round(gameId, number, GameStates.ROUND_RESULT, NOW);
         ReflectionTestUtils.setField(round, "id", roundId);
+        round.setCombatPresentation(NOW.minusSeconds(3), NOW.minusSeconds(2), NOW, 250);
         return round;
     }
 

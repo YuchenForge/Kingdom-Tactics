@@ -4,7 +4,7 @@ A deployable, server-authoritative 1v1 turn-based tactical auto-battler. Players
 
 This project is designed to showcase transactional backends, deterministic domain engines, secure command processing, and production-grade observability.
 
-**Status:** Phase 4 complete — next is Phase 5 (frontend MVP)
+**Status:** Phase 5 implemented; result/play-again browser flow verified; full backend CI rerun and live eight-round sign-off pending. Ready to begin Phase 6 automatic combat animation development.
 
 ---
 
@@ -70,7 +70,7 @@ mvn -pl api spring-boot:run            # API on :8080 — runs migrations
 mvn -pl worker spring-boot:run         # or: docker compose up -d worker
 ```
 
-Frontend arrives in Phase 5. Compose defines Postgres + worker; start the worker only after the API has applied migrations. Do not combine `-am` with `spring-boot:run`. Full stack (API + frontend + worker) is Phase 7.
+The Phase 5 frontend is available in `frontend/` (see its [setup guide](frontend/README.md)). Compose defines Postgres + worker; start the worker only after the API has applied migrations. Do not combine `-am` with `spring-boot:run`. Full stack (API + frontend + worker) is Phase 7.
 
 ---
 
@@ -84,7 +84,7 @@ Frontend arrives in Phase 5. Compose defines Postgres + worker; start the worker
 | **3** | Planning & commands | ✅ Complete |
 | **4** | Worker & resolution | ✅ Complete |
 | **5** | Frontend MVP | 📝 Next |
-| **6** | Replay & animation | ⏳ Planned |
+| **6** | Combat animation | ⏳ Planned |
 | **7** | Deploy & polish | ⏳ Planned |
 | **8** | One expansion | ⏳ Planned |
 
@@ -99,7 +99,7 @@ React + TypeScript client
   ├─ Tailwind CSS + CSS Grid
   ├─ TanStack Query: server-state fetching
   ├─ React useState: local selection/drag
-  └─ Framer Motion: Phase 6 replay
+  └─ Combat animation library: Phase 6 (choice pending)
             │
             ▼
 Java / Spring Boot API
@@ -167,7 +167,7 @@ See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines on commits, PRs, c
 
 ### Replay a match (Phase 4+)
 
-Participants can page `GET /api/games/{gameId}/events?round=&afterSequence=`. Round/match summaries: `GET .../rounds/{n}/result`, `GET .../result`. Visual replay is Phase 6.
+Participants can page `GET /api/games/{gameId}/events?round=&afterSequence=`. Round/match summaries: `GET .../rounds/{n}/result`, `GET .../result`. Phase 6 will animate combat automatically during each round; a historical replay viewer is outside its scope.
 
 ### View game state (available now)
 
@@ -210,4 +210,4 @@ For questions or issues, open a GitHub issue or discussion.
 
 ---
 
-**Next step:** [Phase 5 — Frontend MVP](ROADMAP.md#phase-5-frontend-mvp).
+**Next step:** [Phase 6 — Automatic combat animation](ROADMAP.md#phase-6-automatic-combat-animation). See the Phase 5 verification notes above that section before final acceptance.

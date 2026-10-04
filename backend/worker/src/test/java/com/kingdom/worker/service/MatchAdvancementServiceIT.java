@@ -15,6 +15,9 @@ import com.kingdom.api.repository.ShopOfferRepository;
 import com.kingdom.api.repository.UserRepository;
 import com.kingdom.worker.support.AbstractPostgresIT;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -218,6 +221,55 @@ class MatchAdvancementServiceIT extends AbstractPostgresIT {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {3, 8})
+    void advance_finishWaitsForDeadlineAndAwardsRatingsExactlyOnce(int roundNumber) {
+        Fixture f = seedUnadvanced(roundNumber, keep(roundNumber == 3 ? 0 : 10, 12),
+                gold(10, 10), emptyBoard());
+        Round round = roundRepository.findById(f.roundId()).orElseThrow();
+        Instant end = testClock.instant().plusSeconds(5);
+        round.setCombatPresentation(end.minusSeconds(3), end.minusSeconds(2), end, 250);
+        roundRepository.saveAndFlush(round);
+        testClock.set(end.minusMillis(1));
+        assertThat(advancementService.advance(f.roundId())).isFalse();
+        assertThat(gameRepository.findById(f.gameId()).orElseThrow().getState()).isEqualTo(GameStates.ROUND_RESULT);
+        assertThat(userRepository.findById(f.player0Id()).orElseThrow().getRating()).isEqualTo(1200);
+        assertThat(userRepository.findById(f.player1Id()).orElseThrow().getRating()).isEqualTo(1200);
+        testClock.set(end);
+        assertThat(advancementService.advance(f.roundId())).isTrue();
+        assertThat(advancementService.advance(f.roundId())).isFalse();
+        assertThat(gameRepository.findById(f.gameId()).orElseThrow().getState()).isEqualTo(GameStates.FINISHED);
+        assertThat(userRepository.findById(f.player0Id()).orElseThrow().getRating()).isEqualTo(1175);
+        assertThat(userRepository.findById(f.player1Id()).orElseThrow().getRating()).isEqualTo(1225);
+    }
+
+    @Test
+    void dueFinderFiltersFutureRoundsBeforeApplyingPageLimit() {
+        Fixture future = seedUnadvanced(1, keep(20, 20), gold(10, 10), emptyBoard());
+        Round round = roundRepository.findById(future.roundId()).orElseThrow();
+        round.setCombatPresentation(testClock.instant(), testClock.instant().plusSeconds(2),
+                testClock.instant().plusSeconds(4), 250);
+        roundRepository.saveAndFlush(round);
+        Fixture due = seedUnadvanced(1, keep(20, 20), gold(10, 10), emptyBoard());
+        // Use a sufficiently early due timestamp to isolate this fixture from other test rows.
+        Round dueRound = roundRepository.findById(due.roundId()).orElseThrow();
+        dueRound.setCombatPresentation(Instant.EPOCH, Instant.EPOCH, Instant.EPOCH, 250);
+        roundRepository.saveAndFlush(dueRound);
+        assertThat(roundRepository.findIdsNeedingAdvance(GameStates.ROUND_RESULT,
+                Instant.EPOCH, PageRequest.of(0, 1))).containsExactly(due.roundId());
+        assertThat(roundRepository.findIdsNeedingAdvance(GameStates.ROUND_RESULT,
+                testClock.instant(), PageRequest.of(0, 1000))).doesNotContain(future.roundId());
+    }
+
+    @Test
+    void lateWorkerGivesNextPreparationFullDeadlineFromActualAdvancement() {
+        Fixture f = seedUnadvanced(1, keep(20, 20), gold(10, 10), emptyBoard());
+        testClock.set(testClock.instant().plusSeconds(120));
+        assertThat(advancementService.advance(f.roundId())).isTrue();
+        Round next = roundRepository.findByGameIdAndRoundNumber(f.gameId(), 2).orElseThrow();
+        assertThat(next.getPlanningDeadline()).isEqualTo(testClock.instant().plusSeconds(45));
+    }
+
     private Fixture seedUnadvanced(int roundNumber, int[] keep, int[] gold, BoardLane board) {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         User u0 = userRepository.save(new User("a0_" + suffix, "a0_" + suffix + "@t.com", new byte[]{1}));
@@ -241,7 +293,9 @@ class MatchAdvancementServiceIT extends AbstractPostgresIT {
         gamePlayerRepository.save(gp1);
 
         Round round = new Round(game.getId(), roundNumber, GameStates.ROUND_RESULT, Instant.now().plusSeconds(45));
-        round.setFinishedAt(Instant.now());
+        round.setFinishedAt(testClock.instant().minusSeconds(3));
+        round.setCombatPresentation(testClock.instant().minusSeconds(2),
+                testClock.instant().minusSeconds(2), testClock.instant(), 250);
         round.setOutcome("DRAW");
         round.setKeepDamage(Map.of("0", 0, "1", 0));
         // advanced_at null — TX3 input

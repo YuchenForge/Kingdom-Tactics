@@ -10,6 +10,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,6 +25,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class RoundScannerTest {
 
+    private static final Instant NOW = Instant.parse("2026-10-03T12:00:00Z");
     private static final Pageable PAGE = PageRequest.of(0, 50);
 
     @Mock
@@ -33,7 +37,7 @@ class RoundScannerTest {
 
     @BeforeEach
     void setUp() {
-        scanner = new RoundScanner(rounds, job);
+        scanner = new RoundScanner(rounds, job, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -54,7 +58,7 @@ class RoundScannerTest {
         UUID roundResultId = UUID.randomUUID();
         when(rounds.findIdsByState(GameStates.LOCKED, PAGE)).thenReturn(List.of(lockedId));
         when(rounds.findIdsByState(GameStates.RESOLVING, PAGE)).thenReturn(List.of(resolvingId));
-        when(rounds.findIdsNeedingAdvance(GameStates.ROUND_RESULT, PAGE))
+        when(rounds.findIdsNeedingAdvance(GameStates.ROUND_RESULT, NOW, PAGE))
                 .thenReturn(List.of(roundResultId));
 
         scanner.poll();
@@ -70,7 +74,7 @@ class RoundScannerTest {
         UUID second = UUID.randomUUID();
         when(rounds.findIdsByState(GameStates.LOCKED, PAGE)).thenReturn(List.of(first, second));
         when(rounds.findIdsByState(GameStates.RESOLVING, PAGE)).thenReturn(List.of());
-        when(rounds.findIdsNeedingAdvance(GameStates.ROUND_RESULT, PAGE)).thenReturn(List.of());
+        when(rounds.findIdsNeedingAdvance(GameStates.ROUND_RESULT, NOW, PAGE)).thenReturn(List.of());
         doThrow(new RuntimeException("boom")).when(job).processLocked(first);
 
         scanner.poll();
@@ -81,6 +85,6 @@ class RoundScannerTest {
 
     private void stubEmptyFinders() {
         when(rounds.findIdsByState(any(), any(Pageable.class))).thenReturn(List.of());
-        when(rounds.findIdsNeedingAdvance(any(), any(Pageable.class))).thenReturn(List.of());
+        when(rounds.findIdsNeedingAdvance(any(), any(Instant.class), any(Pageable.class))).thenReturn(List.of());
     }
 }

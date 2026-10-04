@@ -17,7 +17,7 @@ class FlywayMigrationIT extends AbstractPostgresIT {
         Integer migrationCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = true",
                 Integer.class);
-        assertThat(migrationCount).isEqualTo(11);
+        assertThat(migrationCount).isEqualTo(12);
 
         assertThat(tableExists("users")).isTrue();
         assertThat(tableExists("games")).isTrue();
@@ -87,6 +87,15 @@ class FlywayMigrationIT extends AbstractPostgresIT {
 
         assertThat(columnExists("rounds", "outcome")).isTrue();
         assertThat(columnExists("rounds", "keep_damage")).isTrue();
+    }
+
+    @Test
+    void phase6PresentationColumnsAndIndexExist() {
+        assertThat(columnExists("rounds", "presentation_starts_at")).isTrue();
+        assertThat(columnExists("rounds", "combat_ends_at")).isTrue();
+        assertThat(columnExists("rounds", "presentation_ends_at")).isTrue();
+        assertThat(columnExists("rounds", "tick_duration_ms")).isTrue();
+        assertThat(indexExists("rounds", "idx_rounds_presentation_due")).isTrue();
     }
 
     private boolean tableExists(String tableName) {

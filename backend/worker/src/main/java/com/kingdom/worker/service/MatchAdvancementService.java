@@ -68,15 +68,22 @@ public class MatchAdvancementService {
     }
 
     /**
-     * Advance once after TX2.
+     * Advance once after the persisted presentation deadline.
      *
-     * @return true if this worker advanced; false if already advanced / not ROUND_RESULT
+     * @return true if this worker advanced; false if not due / already advanced / not ROUND_RESULT
      */
     @Transactional
     public boolean advance(UUID roundId) {
         // Lock order: round → game → players (seat) → users (id, finish only)
         Round round = roundRepository.lockUnadvancedRoundResult(roundId).orElse(null);
         if (round == null) {
+            return false;
+        }
+
+        // Recheck under the round lock: callers and stale scans cannot advance early.
+        // NULL is the documented compatibility path for results predating Phase 6.
+        if (round.getPresentationEndsAt() != null
+                && clock.instant().isBefore(round.getPresentationEndsAt())) {
             return false;
         }
 

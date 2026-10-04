@@ -21,8 +21,8 @@ import java.util.UUID;
  * (ClaimService / ResolveService / MatchAdvancementService); this class must not
  * wrap engine work in a TX.
  *
- * Sequence for paths 1–2: engine (no TX) → resolveService.commit (TX2) → advance (TX3).
- * Path 3: advance only (recovers if worker died between TX2 and TX3).
+ * Sequence for paths 1–2: engine (no TX) → resolveService.commit (TX2) → scheduled advance (TX3).
+ * Path 3: advance due results only (also recovers after a worker restart).
  */
 @Service
 public class RoundResolutionJob {
@@ -48,7 +48,7 @@ public class RoundResolutionJob {
         this.roundRepository = roundRepository;
     }
 
-    /** Path 1: claim (TX1) → engine → resolve (TX2) → advance (TX3). */
+    /** Path 1: claim (TX1) → engine → resolve (TX2) → scheduled advance (TX3). */
     public void processLocked(UUID roundId) {
         Optional<ClaimedRound> claimed = claimService.claim(roundId);
         if (claimed.isEmpty()) {
@@ -59,7 +59,7 @@ public class RoundResolutionJob {
     }
 
     /**
-     * Path 2: engine with existing combat_seed → resolve (TX2) → advance (TX3).
+     * Path 2: engine with existing combat_seed → resolve (TX2) → scheduled advance (TX3).
      * Does not claim or change combat_seed (no TX1).
      */
     public void retryResolving(UUID roundId) {
@@ -109,7 +109,6 @@ public class RoundResolutionJob {
                 roundId, gameId, roundNumber, combatSeed,
                 result.getEvents().size(), result.getEndReason());
 
-        // New TX via MatchAdvancementService bean — path 3 recovers if we die here
-        advancementService.advance(roundId);
+        // The scanner dispatches TX3 only once the persisted presentation is due.
     }
 }

@@ -68,7 +68,7 @@ class RoundResolutionJobTest {
     }
 
     @Test
-    void processLocked_claimsThenResolvesThenCommitsThenAdvances() {
+    void processLocked_claimsThenResolvesThenCommitsWithoutAdvancing() {
         UUID roundId = UUID.randomUUID();
         UUID gameId = UUID.randomUUID();
         long seed = 99L;
@@ -77,7 +77,6 @@ class RoundResolutionJobTest {
         when(claimService.claim(roundId)).thenReturn(Optional.of(claimed));
         when(resolutionService.resolve(roundId, gameId, seed)).thenReturn(result);
         when(resolveService.commit(roundId, gameId, 1, result)).thenReturn(true);
-        when(advancementService.advance(roundId)).thenReturn(true);
 
         job.processLocked(roundId);
 
@@ -85,7 +84,7 @@ class RoundResolutionJobTest {
         order.verify(claimService).claim(roundId);
         order.verify(resolutionService).resolve(roundId, gameId, seed);
         order.verify(resolveService).commit(roundId, gameId, 1, result);
-        order.verify(advancementService).advance(roundId);
+        verifyNoInteractions(advancementService);
         verifyNoInteractions(roundRepository);
         verifyNoMoreInteractions(claimService, resolutionService, resolveService, advancementService);
     }
@@ -125,7 +124,7 @@ class RoundResolutionJobTest {
     }
 
     @Test
-    void retryResolving_usesExistingSeedWithoutClaimThenCommitsThenAdvances() {
+    void retryResolving_usesExistingSeedWithoutClaimThenCommitsWithoutAdvancing() {
         UUID roundId = UUID.randomUUID();
         UUID gameId = UUID.randomUUID();
         long seed = 42L;
@@ -134,14 +133,13 @@ class RoundResolutionJobTest {
         when(roundRepository.findById(roundId)).thenReturn(Optional.of(round));
         when(resolutionService.resolve(roundId, gameId, seed)).thenReturn(result);
         when(resolveService.commit(eq(roundId), eq(gameId), eq(2), eq(result))).thenReturn(true);
-        when(advancementService.advance(roundId)).thenReturn(true);
 
         job.retryResolving(roundId);
 
         InOrder order = inOrder(resolutionService, resolveService, advancementService);
         order.verify(resolutionService).resolve(roundId, gameId, seed);
         order.verify(resolveService).commit(roundId, gameId, 2, result);
-        order.verify(advancementService).advance(roundId);
+        verifyNoInteractions(advancementService);
         verifyNoInteractions(claimService);
         verify(roundRepository, never()).save(any());
     }
@@ -172,7 +170,6 @@ class RoundResolutionJobTest {
     @Test
     void advanceOnly_delegatesToAdvancementService() {
         UUID roundId = UUID.randomUUID();
-        when(advancementService.advance(roundId)).thenReturn(true);
 
         job.advanceOnly(roundId);
 

@@ -65,6 +65,7 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
         Map<String, Object> board1Before = copyBoard(fixture.roundId(), fixture.player1Id());
 
         job.processLocked(fixture.roundId());
+        assertPresentationThenAdvance(fixture);
 
         Round round = roundRepository.findById(fixture.roundId()).orElseThrow();
         Game game = gameRepository.findById(fixture.gameId()).orElseThrow();
@@ -124,7 +125,7 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
 
         // Path 3 finder should not see an already-advanced round
         List<UUID> needingAdvance = roundRepository.findIdsNeedingAdvance(
-                GameStates.ROUND_RESULT, PageRequest.of(0, 50));
+                GameStates.ROUND_RESULT, testClock.instant(), PageRequest.of(0, 50));
         assertThat(needingAdvance).doesNotContain(fixture.roundId());
     }
 
@@ -132,7 +133,7 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
     void advanceOnly_recoversUnadvancedRoundResult() {
         Fixture fixture = seedUnadvancedRoundResult();
 
-        assertThat(roundRepository.findIdsNeedingAdvance(GameStates.ROUND_RESULT, PageRequest.of(0, 50)))
+        assertThat(roundRepository.findIdsNeedingAdvance(GameStates.ROUND_RESULT, testClock.instant(), PageRequest.of(0, 50)))
                 .contains(fixture.roundId());
 
         job.advanceOnly(fixture.roundId());
@@ -188,6 +189,7 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
         Long seedAfterClaim = afterClaim.getCombatSeed();
 
         job.retryResolving(fixture.roundId());
+        assertPresentationThenAdvance(fixture);
 
         Round afterRetry = roundRepository.findById(fixture.roundId()).orElseThrow();
         Game gameAfterRetry = gameRepository.findById(fixture.gameId()).orElseThrow();
@@ -254,6 +256,33 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
             assertThat(snap.getKeepHp()).isEqualTo(
                     Math.max(0, 20 - replay.getKeepDamageForPlayer(seat)));
         }
+    }
+
+    private void assertPresentationThenAdvance(Fixture fixture) {
+        Round pending = roundRepository.findById(fixture.roundId()).orElseThrow();
+        assertThat(pending.getAdvancedAt()).isNull();
+        assertThat(pending.getPresentationStartsAt()).isEqualTo(pending.getFinishedAt().plusSeconds(1));
+        assertThat(pending.getPresentationEndsAt()).isEqualTo(pending.getCombatEndsAt().plusSeconds(2));
+        assertThat(pending.getTickDurationMs()).isEqualTo(250);
+        assertThat(gameRepository.findById(fixture.gameId()).orElseThrow().getState())
+                .isEqualTo(GameStates.ROUND_RESULT);
+        int count = eventCount(fixture.gameId(), 1);
+        testClock.set(pending.getPresentationEndsAt().minusMillis(1));
+        assertThat(roundRepository.findIdsNeedingAdvance(GameStates.ROUND_RESULT,
+                testClock.instant(), PageRequest.of(0, 50))).doesNotContain(fixture.roundId());
+        job.advanceOnly(fixture.roundId());
+        assertThat(roundRepository.findById(fixture.roundId()).orElseThrow().getAdvancedAt()).isNull();
+        // A fresh transaction after TX2 can recover solely from persisted data.
+        testClock.set(pending.getPresentationEndsAt());
+        assertThat(roundRepository.findIdsNeedingAdvance(GameStates.ROUND_RESULT,
+                testClock.instant(), PageRequest.of(0, 50))).contains(fixture.roundId());
+        job.advanceOnly(fixture.roundId());
+        job.advanceOnly(fixture.roundId());
+        assertThat(eventCount(fixture.gameId(), 1)).isEqualTo(count);
+        assertThat(roundRepository.findById(fixture.roundId()).orElseThrow().getPresentationEndsAt())
+                .isEqualTo(pending.getPresentationEndsAt());
+        Round next = roundRepository.findByGameIdAndRoundNumber(fixture.gameId(), 2).orElseThrow();
+        assertThat(next.getPlanningDeadline()).isEqualTo(testClock.instant().plusSeconds(45));
     }
 
     private int eventCount(UUID gameId, int roundNumber) {

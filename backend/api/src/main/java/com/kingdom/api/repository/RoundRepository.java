@@ -37,15 +37,16 @@ public interface RoundRepository extends JpaRepository<Round, UUID> {
     List<UUID> findIdsByState(@Param("state") String state, Pageable pageable);
 
     /**
-     * Candidate IDs for path 3 (ROUND_RESULT with advanced_at IS NULL).
-     * Uses idx_rounds_unadvanced (state, advanced_at).
+     * Due candidates for path 3; null deadlines are pre-Phase-6 results.
+     * The advancement transaction rechecks the deadline while holding the row lock.
      */
     @Query("""
             SELECT r.id FROM Round r
             WHERE r.state = :state AND r.advancedAt IS NULL
-            ORDER BY r.finishedAt
+              AND (r.presentationEndsAt IS NULL OR r.presentationEndsAt <= :now)
+            ORDER BY r.presentationEndsAt, r.finishedAt, r.id
             """)
-    List<UUID> findIdsNeedingAdvance(@Param("state") String state, Pageable pageable);
+    List<UUID> findIdsNeedingAdvance(@Param("state") String state, @Param("now") Instant now, Pageable pageable);
 
     /**
      * Planning transition: pessimistic lock on this round row (any state).

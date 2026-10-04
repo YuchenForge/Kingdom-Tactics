@@ -20,6 +20,8 @@ import com.kingdom.engine.domain.UnitDefinition;
 import com.kingdom.engine.domain.UnitInstance;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -90,8 +92,9 @@ class ResolveServiceTest {
         verifyNoInteractions(gameRepository, gameEventRepository, snapshotRepository, gamePlayerRepository);
     }
 
-    @Test
-    void commit_persistsEventsKeepHpSnapshotsAndRoundResult() {
+    @ParameterizedTest
+    @ValueSource(ints = {0, 8, 160})
+    void commit_persistsEventsKeepHpSnapshotsAndRoundResult(int finalTick) {
         Round round = resolvingRound();
         Game game = resolvingGame();
         GamePlayer p0 = new GamePlayer(gameId, player0Id, 0);
@@ -107,7 +110,7 @@ class ResolveServiceTest {
         when(roundPlanRepository.findByRoundIdAndPlayerId(roundId, player1Id))
                 .thenReturn(Optional.of(planWithGold(player1Id, 9)));
 
-        ResolutionResult result = stubResult(2, 3);
+        ResolutionResult result = stubResult(2, 3, finalTick);
         boolean committed = resolveService.commit(roundId, gameId, 1, result);
 
         assertThat(committed).isTrue();
@@ -122,6 +125,10 @@ class ResolveServiceTest {
         assertThat(round.getOutcome()).isEqualTo("DRAW");
         assertThat(round.getKeepDamage()).isEqualTo(Map.of("0", 2, "1", 3));
         assertThat(round.getFinishedAt()).isEqualTo(NOW);
+        assertThat(round.getPresentationStartsAt()).isEqualTo(NOW.plusSeconds(1));
+        assertThat(round.getCombatEndsAt()).isEqualTo(NOW.plusMillis(1000L + finalTick * 250L));
+        assertThat(round.getPresentationEndsAt()).isEqualTo(NOW.plusMillis(3000L + finalTick * 250L));
+        assertThat(round.getTickDurationMs()).isEqualTo(250);
         assertThat(round.getAdvancedAt()).isNull();
         // round_plans are only read for gold — never saved/mutated in TX2
         verify(roundPlanRepository, never()).save(any());
@@ -181,12 +188,16 @@ class ResolveServiceTest {
     }
 
     private static ResolutionResult stubResult(int dmg0, int dmg1) {
+        return stubResult(dmg0, dmg1, 0);
+    }
+
+    private static ResolutionResult stubResult(int dmg0, int dmg1, int finalTick) {
         CombatBoard board = CombatBoard.merge(new Board(0), new Board(1));
         UnitInstance ghost = new UnitInstance("u", UnitDefinition.squire(), 0, 0);
         ghost.setPlayerId(0);
         List<CombatEvent> events = List.of(
                 CombatEvent.unitPlaced(0, ghost),
-                CombatEvent.combatEnded(0, "DRAW"));
-        return new ResolutionResult(events, board, new int[] {dmg0, dmg1}, 0, "DRAW", -1);
+                CombatEvent.combatEnded(finalTick, "DRAW"));
+        return new ResolutionResult(events, board, new int[] {dmg0, dmg1}, finalTick, "DRAW", -1);
     }
 }

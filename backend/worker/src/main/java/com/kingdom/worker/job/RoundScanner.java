@@ -9,6 +9,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -28,13 +29,15 @@ public class RoundScanner {
 
     private final RoundRepository rounds;
     private final RoundResolutionJob job;
+    private final Clock clock;
 
-    public RoundScanner(RoundRepository rounds, RoundResolutionJob job) {
+    public RoundScanner(RoundRepository rounds, RoundResolutionJob job, Clock clock) {
         this.rounds = rounds;
         this.job = job;
+        this.clock = clock;
     }
 
-    @Scheduled(fixedDelayString = "${app.worker.poll-ms:10000}")
+    @Scheduled(fixedDelayString = "${app.worker.poll-ms:1000}")
     public void poll() {
         var page = PageRequest.of(0, BATCH_SIZE);
 
@@ -45,7 +48,7 @@ public class RoundScanner {
                 rounds.findIdsByState(GameStates.RESOLVING, page),
                 job::retryResolving);
         processPath("ADVANCE",
-                rounds.findIdsNeedingAdvance(GameStates.ROUND_RESULT, page),
+                rounds.findIdsNeedingAdvance(GameStates.ROUND_RESULT, clock.instant(), page),
                 job::advanceOnly);
     }
 

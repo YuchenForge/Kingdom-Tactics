@@ -291,7 +291,7 @@ Worker TX pipeline + Phase 4 read APIs are shipped. `ROUND_RESULT` is a durable 
 
 ## Phase 5: Frontend MVP
 
-**Status:** Planned (after Phase 4)
+**Status:** Implemented — final acceptance pending (2026-10-01).
 
 **Goal:** Make the game playable without compromising backend correctness.
 
@@ -346,41 +346,38 @@ Details: [api-contract.md](docs/api-contract.md).
 
 ### Definition of done
 
-Two people can play a complete 8-round match in separate browser sessions. Fully playable with static results (replay animation is Phase 6).
+Two people can play a complete 8-round match in separate browser sessions. Fully playable with static results (combat animation is Phase 6).
 
 ---
 
-## Phase 6: Combat replay and animation
+## Phase 6: Automatic combat animation
 
-**Status:** Planned (after Phase 5)
+**Status:** Ready to begin implementation. Standalone motion preview approved 2026-10-02; production animation and server timing not started.
 
-**Goal:** Make outcomes understandable and visually satisfying.
+**Goal:** At preparation end, show tick-by-tick combat on the merged board, followed by outcome/Keep damage, then the next preparation or match result.
 
 ### Build
 
-**Event fetch** (Phase 4 APIs):
-- `GET /api/games/{gameId}/events?round=N&afterSequence=M&limit=…`
-- Page until `complete && !hasMore` after a resolved round is discovered
-- **No** separate `/replay` aggregation endpoint for MVP
+- Reuse event pagination, enriched UNIT_PLACED, historical end snapshots, and the static landscape CombatBoard.
+- Add persisted server-controlled presentation timing to ROUND_RESULT. Gate TX3 until it ends, including the final match transition. No browser acknowledgment or long-running transaction.
+- Give the next preparation its full 45 seconds after actual advancement.
+- Timing defaults: 1-second lead-in for board merge, 250 ms per logical tick, 2-second result interval including final effect settling. Finalize timestamp semantics with the API contract; no effect extends the server deadline.
+- Port the approved board spin/merge, HP-before-bar layout, differentiated attacks/reactions, primary-target Mage shockwave, Healer trail, movement bounce and death finish. Use small within-tick offsets while preserving recorded sequence.
+- Keep pure event state separate from displayed HP; synchronize feedback with impact and cancel stale effects on catch-up/round change.
+- Fetch the complete recorded event sequence and animate movement, attacks, heals, and deaths automatically. The browser never simulates combat.
+- Recover the shared current tick after reload/background/reconnect; discard obsolete presentation when the live round advances.
+- Preserve polling, both viewer orientations, and reduced-motion access.
+- No ReplayPage, Watch round overlay, or Play/Pause/Restart controls required.
 
-**Animation** (Framer Motion + local state):
-- Order events by sequence → group by tick → animate tick → next tick (~250ms)
-- Get MOVE / ATTACK / DAMAGE / DEATH correct before any overlap scheduler
+### Verification
 
-**Combat replay controls**:
-- Play / Pause / 1× / 2× / Restart
-- Optional in-match overlay during next planning (dismissible; never blocks opponent)
-
-**Animations**:
-- Unit placement, movement, attack, heal, death, Keep damage banner
-
-### Tests
-
-- Playwright: watch full combat replay; positions match server end snapshot
+Focused worker timing/recovery tests, event reducer/snapshot tests, pagination/clock tests, and a two-browser automatic-combat flow. Reuse existing Phase 5 coverage.
 
 ### Definition of done
 
-A player can watch a completed round with clear tick-sequential animations and basic controls. Final board matches server combat-end snapshot.
+Both players see combat unfold on the merged board before the next planning period begins. The final frame matches server snapshots; disconnects do not stall advancement; final combat precedes the match result.
+
+Implementation details and checklist: `backend/docs/PHASE_6_GUIDE.md` and `backend/docs/PHASE_6_CHECKLIST.md` (local documentation).
 
 ---
 
@@ -399,7 +396,7 @@ A player can watch a completed round with clear tick-sequential animations and b
 **GitHub Actions CI**:
 - Backend tests (`*Test` + `*IT`)
 - Frontend lint/typecheck/unit
-- Playwright replay gate
+- Automatic combat presentation E2E gate
 - Build artifacts
 
 **Production deployment**:
@@ -419,7 +416,7 @@ A player can watch a completed round with clear tick-sequential animations and b
 
 ### Definition of done
 
-Someone can open the live URL, create an account, play (invite a friend), watch participant replay, clone + Docker Compose, and see green CI — without help from you. A public spectator/demo is optional.
+Someone can open the live URL, create an account, play (invite a friend), watch animated combat, clone + Docker Compose, and see green CI — without help from you. A public spectator/demo is optional.
 
 ### Tests
 
@@ -460,7 +457,7 @@ Assumes 2-3 weeks per phase if working full-time:
 | 3 (Commands) | 2 weeks | 7 weeks |
 | 4 (Worker) | 2 weeks | 9 weeks |
 | 5 (Frontend) | 2 weeks | 11 weeks |
-| 6 (Replay) | 1 week | 12 weeks |
+| 6 (Combat animation) | 1 week | 12 weeks |
 | 7 (Deploy) | 1 week | 13 weeks |
 | 8 (Expansion) | 2-3 weeks | 16 weeks |
 

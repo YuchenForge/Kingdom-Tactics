@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,10 @@ import java.util.UUID;
  */
 @Service
 public class ResolveService {
+
+    static final long PRESENTATION_LEAD_IN_MS = 1000;
+    static final int TICK_DURATION_MS = 250;
+    static final long PRESENTATION_RESULT_MS = 2000;
 
     private final RoundRepository roundRepository;
     private final GameRepository gameRepository;
@@ -115,7 +120,13 @@ public class ResolveService {
         keepDamage.put("1", dmg1);
         round.setOutcome(CombatOutcome.requireKnown(result.getEndReason()).name());
         round.setKeepDamage(keepDamage);
-        round.setFinishedAt(clock.instant());
+        Instant resolvedAt = clock.instant();
+        Instant startsAt = resolvedAt.plusMillis(PRESENTATION_LEAD_IN_MS);
+        // Use the final logical tick, including empty ticks, not the event count.
+        Instant combatEndsAt = startsAt.plusMillis(Math.multiplyExact((long) result.getFinalTick(), TICK_DURATION_MS));
+        round.setCombatPresentation(startsAt, combatEndsAt,
+                combatEndsAt.plusMillis(PRESENTATION_RESULT_MS), TICK_DURATION_MS);
+        round.setFinishedAt(resolvedAt);
         round.setState(GameStates.ROUND_RESULT);
         // advanced_at stays NULL — TX3 owns advancement
         game.setState(GameStates.ROUND_RESULT);

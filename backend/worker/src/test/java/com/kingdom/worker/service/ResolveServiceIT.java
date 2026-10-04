@@ -62,7 +62,14 @@ class ResolveServiceIT extends AbstractPostgresIT {
         ResolutionResult result = drawResult(damage(2, 3));
 
         assertThat(resolveService.commit(fixture.roundId(), fixture.gameId(), 1, result)).isTrue();
+        Round committed = roundRepository.findById(fixture.roundId()).orElseThrow();
+        Instant startsAt = committed.getPresentationStartsAt();
+        Instant endsAt = committed.getPresentationEndsAt();
+        testClock.set(testClock.instant().plusSeconds(60));
         assertThat(resolveService.commit(fixture.roundId(), fixture.gameId(), 1, result)).isFalse();
+        Round retried = roundRepository.findById(fixture.roundId()).orElseThrow();
+        assertThat(retried.getPresentationStartsAt()).isEqualTo(startsAt);
+        assertThat(retried.getPresentationEndsAt()).isEqualTo(endsAt);
 
         assertPostTx2Checkpoint(fixture, "DRAW", Map.of("0", 2, "1", 3), 18, 12, 2);
         assertRoundPlansUnchanged(fixture);

@@ -9,7 +9,7 @@ spring:
 app:
   worker:
     enabled: true
-    poll-ms: 10000
+    poll-ms: 1000
 
 logging:
   level:

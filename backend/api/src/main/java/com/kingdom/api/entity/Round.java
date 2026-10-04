@@ -46,6 +46,19 @@ public class Round {
     @Column(name = "finished_at")
     private Instant finishedAt;
 
+    // Written once by TX2; null only before resolution or for pre-Phase-6 history.
+    @Column(name = "presentation_starts_at")
+    private Instant presentationStartsAt;
+
+    @Column(name = "combat_ends_at")
+    private Instant combatEndsAt;
+
+    @Column(name = "presentation_ends_at")
+    private Instant presentationEndsAt;
+
+    @Column(name = "tick_duration_ms")
+    private Integer tickDurationMs;
+
     @Column(name = "advanced_at")
     private Instant advancedAt;
 
@@ -135,6 +148,25 @@ public class Round {
 
     public void setFinishedAt(Instant finishedAt) {
         this.finishedAt = finishedAt;
+    }
+
+    public Instant getPresentationStartsAt() { return presentationStartsAt; }
+
+    public Instant getCombatEndsAt() { return combatEndsAt; }
+
+    public Instant getPresentationEndsAt() { return presentationEndsAt; }
+
+    public Integer getTickDurationMs() { return tickDurationMs; }
+
+    public void setCombatPresentation(Instant startsAt, Instant combatEndsAt, Instant endsAt, int tickDurationMs) {
+        if (startsAt == null || combatEndsAt == null || endsAt == null
+                || combatEndsAt.isBefore(startsAt) || endsAt.isBefore(combatEndsAt) || tickDurationMs <= 0) {
+            throw new IllegalArgumentException("Invalid combat presentation schedule");
+        }
+        this.presentationStartsAt = startsAt;
+        this.combatEndsAt = combatEndsAt;
+        this.presentationEndsAt = endsAt;
+        this.tickDurationMs = tickDurationMs;
     }
 
     public Instant getAdvancedAt() {
