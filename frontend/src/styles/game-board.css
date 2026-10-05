@@ -157,3 +157,6 @@
  .game-page [aria-label="Last round result"] { display:flex; flex-wrap:wrap; gap:4px 16px; padding-top:6px; margin-top:8px; }
  .game-page [aria-label="Last round result"] p { margin:0; }
 }
+
+.combat-health { position: absolute; bottom: 3px; left: 5%; width: 90%; display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.combat-health meter { width: 100%; min-width: 0; height: 8px; }

@@ -10,12 +10,14 @@ import { Link, useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { useAuth } from '../hooks/useAuth'
 import { useGameState } from '../hooks/useGameState'
+import { useCombatPlayback } from '../hooks/useCombatPlayback'
 
 export default function GameBoardPage() {
   const { gameId } = useParams()
   const auth = useAuth()
   const game = useGameState(gameId)
   const state = game.state
+  const playback = useCombatPlayback(state, game.combatRecording)
   const result = game.roundResult
   const [selection, setSelection] = useState<Selection | null>(null)
   const [inspection, setInspection] = useState<Inspection>(null)
@@ -82,14 +84,15 @@ export default function GameBoardPage() {
     </section>}
     {error && <p role="alert">{error}</p>}
     {retry && <div><button disabled={pending || !!unavailable} onClick={() => void run(retry)}>Retry same action</button><button disabled={pending} onClick={() => setRetry(null)}>Dismiss retry</button><p>The previous action may have succeeded. Retry uses its original request key.</p></div>}
-    {state && (state.state === 'RESOLVING' || state.state === 'ROUND_RESULT' || state.state === 'LOCKED') && <CombatBoard state={state} />}
+    {state && (state.state === 'RESOLVING' || state.state === 'ROUND_RESULT' || state.state === 'LOCKED') && <CombatBoard state={state} frame={playback.frame} playbackPhase={playback.position?.phase} />}
     {state && state.state === 'PREPARATION' && <PlanningControls state={state} selected={selected} inspected={inspection} reason={reason}
       onSelect={(unit) => setSelection({ id: unit.id, level: unit.level, gameId, round: state.currentRound })}
       onInspect={setInspection} onAction={act} onLock={() => act({ type: 'lock' })} />}
     {game.isLoadingCombatEvents && <p role="status">Loading combat…</p>}
     {game.combatEventsError && <p role="alert">Could not load combat. Live game updates continue. <button onClick={() => void game.retryCombatEvents()}>Retry combat loading</button></p>}
     {game.isResolving && <p role="status">Resolving…</p>}
-    {result && <section aria-label="Last round result"><h2>Round {result.roundNumber} result</h2>
+    {playback.error && <p role="alert">Could not play combat. Live game updates continue.</p>}
+    {result && !(playback.presenting && result.roundNumber === state?.currentRound) && <section aria-label="Last round result"><h2>Round {result.roundNumber} result</h2>
       <p>{result.outcome === 'DRAW' ? 'Draw' : result.outcome === 'TIME_LIMIT' ? 'Time limit reached' : (result.outcome === 'PLAYER_VICTORY') === (state?.yourSeat === 0) ? 'You won the round' : 'Opponent won the round'}</p>
       {Object.entries(result.keepDamage).map(([seat, damage]) => <p key={seat}>{Number(seat) === state?.yourSeat ? 'You' : 'Opponent'}: {damage} Keep damage; {result.keepHpAfter[seat]} HP remaining.</p>)}
     </section>}

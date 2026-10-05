@@ -1,11 +1,12 @@
 import type { GameState } from '../types'
+import type { CombatState } from '../combat/combatState'
 
-export default function CombatBoard({ state }: { state: GameState }) {
+export default function CombatBoard({ state, frame, playbackPhase }: { state: GameState; frame?: CombatState | null; playbackPhase?: string }) {
   // Server snapshots use global x=0..3, y=0..7. Display horizontally with our seat on the left.
-  const units = state.combatUnits ?? []
+  const units = frame ? Object.values(frame.units).filter(unit => !unit.dead && unit.currentHp > 0) : state.combatUnits ?? []
   return <section className="combat-frame" aria-label="Merged combat board">
     <h2>Round {state.currentRound} · Combat</h2>
-    <p role="status">{state.state === 'ROUND_RESULT' ? 'Combat complete' : 'Resolving…'}</p>
+    <p role="status">{playbackPhase === 'lead-in' ? 'Preparing combat…' : playbackPhase === 'combat' ? 'Combat in progress' : state.state === 'ROUND_RESULT' ? 'Combat complete' : 'Resolving…'}</p>
     <div className="combat-field">
       <aside className="keep friendly-keep"><img src="/assets/keep/keep.svg" alt="" /><strong>Your Keep</strong><span>{state.yourKeepHp} HP</span></aside>
       <div className="merged-grid" role="grid" aria-label="Eight columns by four rows">
@@ -17,7 +18,7 @@ export default function CombatBoard({ state }: { state: GameState }) {
             const side = unit?.seat === state.yourSeat ? 'friendly' : 'enemy'
             return <div className={`combat-cell ${unit ? side : ''}`} role="gridcell" key={col}
               aria-label={`Global ${x},${y}: ${unit ? `${unit.type}, level ${unit.level}, ${side}` : 'empty'}`}>
-              {unit && <><img src={`/assets/units/${unit.type.toLowerCase()}.svg`} alt={unit.type} /><span className="unit-level">{'★'.repeat(unit.level)}</span></>}
+              {unit && <><img src={`/assets/units/${unit.type.toLowerCase()}.svg`} alt={unit.type} /><span className="unit-level">{'★'.repeat(unit.level)}</span>{frame?.units[unit.id] && <span className="combat-health"><span>{frame.units[unit.id].currentHp}</span><meter aria-label={`${unit.type} health`} min={0} max={frame.units[unit.id].maxHp} value={frame.units[unit.id].currentHp} /></span>}</>}
             </div>
           })}
         </div>)}

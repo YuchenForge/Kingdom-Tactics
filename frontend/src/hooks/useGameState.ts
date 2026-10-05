@@ -2,10 +2,11 @@ import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { ApiError } from '../api/client'
-import { getRoundResult, getState, isWrongGameState, matchesActiveRound } from '../api/gameApi'
+import { getRoundResult, isWrongGameState, matchesActiveRound } from '../api/gameApi'
 import type { CommandResult, GameState } from '../types'
 import { useAuth } from './useAuth'
 import { useCombatEvents } from './useCombatEvents'
+import { getTimedGameState } from '../combat/playbackClock'
 
 function hardFailure(error: unknown) {
   return error instanceof ApiError && [401, 403, 404].includes(error.status)
@@ -28,7 +29,7 @@ export function useGameState(gameId: string | undefined) {
   const queryKey = ['gameState', gameId] as const
   const query = useQuery({
     queryKey,
-    queryFn: () => getState(gameId!),
+    queryFn: () => getTimedGameState(gameId!),
     enabled: !!gameId,
     // The next poll is the retry. Surface failure immediately to disable commands.
     retry: false,

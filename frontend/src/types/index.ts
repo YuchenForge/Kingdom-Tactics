@@ -1,3 +1,5 @@
+import type { ServerClockSample } from '../combat/playbackClock'
+
 /** Game lifecycle phases from GET /games and GET /state. */
 export type GamePhase =
   | 'WAITING_FOR_PLAYERS'
@@ -94,6 +96,7 @@ export type CombatPresentation = {
 
 export type GameState = {
   // Optional for cached responses from before Phase 6 API rollout.
+  clockSample?: ServerClockSample // client-only receipt sample; never sent to the API
   serverTime?: string
   combatPresentation?: CombatPresentation | null
   combatUnits?: CombatUnit[]
