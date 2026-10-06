@@ -34,9 +34,12 @@ import java.util.UUID;
 @Service
 public class ResolveService {
 
-    static final long PRESENTATION_LEAD_IN_MS = 1000;
+    // Allow state polling and the first event download to finish before the shared start.
+    static final long PRESENTATION_LEAD_IN_MS = 3000;
     static final int TICK_DURATION_MS = 250;
-    static final long PRESENTATION_RESULT_MS = 2000;
+    // Presentation-only padding: final impact/death/number effects, then a readable result.
+    static final long PRESENTATION_SETTLE_MS = 1000;
+    static final long PRESENTATION_RESULT_MS = 3000;
 
     private final RoundRepository roundRepository;
     private final GameRepository gameRepository;
@@ -125,7 +128,7 @@ public class ResolveService {
         // Use the final logical tick, including empty ticks, not the event count.
         Instant combatEndsAt = startsAt.plusMillis(Math.multiplyExact((long) result.getFinalTick(), TICK_DURATION_MS));
         round.setCombatPresentation(startsAt, combatEndsAt,
-                combatEndsAt.plusMillis(PRESENTATION_RESULT_MS), TICK_DURATION_MS);
+                combatEndsAt.plusMillis(PRESENTATION_SETTLE_MS + PRESENTATION_RESULT_MS), TICK_DURATION_MS);
         round.setFinishedAt(resolvedAt);
         round.setState(GameStates.ROUND_RESULT);
         // advanced_at stays NULL — TX3 owns advancement

@@ -1,0 +1,60 @@
+/* Combat poses are sampled from server time; CSS never starts its own replay clock. */
+.animated-grid { grid-column:2; position:relative; display:grid; grid-template-rows:repeat(4,1fr); gap:5px; aspect-ratio:2; overflow:visible; isolation:isolate; }
+.animated-row { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:5px; min-height:0; }
+.animated-grid .combat-cell { aspect-ratio:auto; transform-origin:center; }
+.combat-sprite { position:absolute; transform:translate(-50%,-50%); pointer-events:none; z-index:2; }
+.combat-sprite .combat-death, .combat-sprite .combat-action, .combat-sprite .combat-reaction { width:100%; height:100%; transform-origin:50% 85%; }
+.combat-sprite .unit-level { position:absolute; top:2px; right:3px; font-size:10px; }
+.combat-effects { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; z-index:3; }
+/* Visual values ported from docs/art/animation-preview.html; production time remains server-owned. */
+.combat-frame.motion-frame {
+  border:1px solid #667b88; background:#25323c; border-radius:12px; padding:22px;
+  box-shadow:0 16px 60px #080f1630; color:#e7edf0; font:15px/1.5 system-ui,sans-serif;
+}
+.motion-framehead, .motion-framefoot { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+.motion-frame .motion-framehead h2 { font-size:18px; font-weight:700; margin:0; color:#58c4d8; }
+.motion-frame .combat-field { grid-template-columns:80px minmax(0,1fr) 80px; gap:16px; min-height:410px; margin:0; }
+.motion-frame .keep { text-align:center; font-size:12px; }
+.motion-frame .keep img { width:72px; max-width:100%; height:auto; margin:0 auto; }
+.motion-frame .keep strong { display:block; font-size:12px; font-weight:400; }
+.motion-frame .keep span { display:block; font-size:20px; font-weight:700; }
+.motion-frame .friendly-keep { color:#58c4d8; }
+.motion-frame .opponent-keep { color:#f5bd65; }
+.motion-frame .animated-grid .combat-cell { background:#31414d; border:1px solid #596e7c; border-radius:4px; }
+.motion-frame .animated-grid:not(.merging) .combat-cell:nth-child(5) { border-left:3px solid #b48c45; }
+.motion-frame .merging .friendly-half { border-color:#58c4d880; }
+.motion-frame .merging .enemy-half { border-color:#f59e0b80; }
+.motion-frame .animated-grid:not(.merging)::after { content:""; position:absolute; pointer-events:none; left:50%; top:0; height:100%; width:5px; transform:translateX(-50%); background:#17232d; border-left:1px solid #58c4d8; border-right:1px solid #f59e0b; opacity:1; z-index:1; }
+.motion-frame .animated-grid:not(.merging)::before { content:''; position:absolute; left:50%; top:50%; width:9px; height:9px; border:1px solid #667b88; background:#17232d; transform:translate(-50%,-50%) rotate(45deg); z-index:2; pointer-events:none; }
+.motion-frame .combat-sprite { padding:4px; box-sizing:border-box; z-index:3; }
+.combat-backplate { position:relative; height:100%; border-bottom:3px solid #58c4d8; border-radius:5px; background:#58c4d809; }
+.combat-sprite.enemy .combat-backplate { border-color:#f59e0b; background:#f59e0b09; }
+.motion-frame .combat-sprite .combat-death { height:calc(100% - 19px); transform-origin:50% 85%; }
+.motion-frame .combat-sprite .combat-action, .motion-frame .combat-sprite .combat-reaction { height:100%; transform-origin:50% 85%; }
+.motion-frame .combat-sprite img { display:block; width:76%; height:100%; object-fit:contain; margin:0 auto; filter:drop-shadow(0 3px 3px #0005); }
+.motion-frame .combat-health { position:absolute; left:5%; right:5%; width:auto; bottom:5px; display:flex; align-items:center; gap:4px; height:14px; }
+.combat-hp-value { flex:0 0 auto; font-size:11px; line-height:14px; padding:0 2px; background:#17232d; border-radius:3px; font-variant-numeric:tabular-nums; }
+.combat-hp-track { flex:1; height:5px; min-width:5px; border-radius:3px; overflow:hidden; background:#111e26; }
+.combat-hp-track i { display:block; height:100%; background:#89cfab; }
+.motion-frame .combat-effects { z-index:9; }
+.motion-framefoot { font-size:13px; color:#adbcc5; min-height:48px; border-top:1px solid #667b8840; padding-top:16px; }
+.motion-framefoot > span:last-child { flex:0 0 auto; }
+.motion-progress { height:3px; background:#31414d; margin-top:18px; }
+.motion-progress i { display:block; height:100%; background:#58c4d8; }
+@media(max-width:650px) {
+  .combat-frame.motion-frame { padding:12px; }
+  .motion-frame .combat-field { grid-template-columns:36px minmax(0,1fr) 36px; gap:5px; min-height:270px; }
+  .motion-frame .keep, .motion-frame .keep strong { font-size:9px; }
+  .motion-frame .keep span { font-size:14px; }
+  .motion-frame .combat-sprite { padding:2px; }
+  .motion-frame .combat-health { gap:2px; bottom:3px; height:11px; }
+  .motion-frame .combat-hp-value { font-size:9px; line-height:11px; }
+  .motion-frame .combat-hp-track { height:4px; }
+  .motion-frame .combat-sprite .combat-death { height:calc(100% - 15px); }
+  .motion-framefoot { font-size:11px; }
+}
+
+/* Override the planning badge anchor so the level badge cannot stretch into a stripe. */
+.motion-frame .combat-sprite .unit-level { bottom:auto; }
+
+@media(max-width:760px) { .combat-sprite .unit-level { font-size:7px; } }

@@ -142,18 +142,41 @@ it('clears selection when the selected id disappears after merging', () => {
   expect(screen.getByText('Select a unit, then choose an empty destination.')).toBeInTheDocument()
 })
 
-it('switches to both combat formations and removes the merged field on the next preparation', () => {
+it('keeps the planning board while resolving instead of flashing the combined board', () => {
   const view = render(page())
   state = { ...state, state: 'RESOLVING', combatUnits: [
     { id: 'a', type: 'Squire', level: 2, seat: 0, x: 2, y: 1 },
     { id: 'b', type: 'Archer', level: 1, seat: 1, x: 2, y: 5 },
   ] }
   update(); view.rerender(page())
-  expect(screen.getAllByRole('gridcell')).toHaveLength(32)
-  expect(screen.getByRole('gridcell', { name: 'Global 2,1: Squire, level 2, friendly' })).toBeInTheDocument()
-  expect(screen.getByRole('gridcell', { name: 'Global 2,5: Archer, level 1, enemy' })).toBeInTheDocument()
+  expect(screen.getAllByRole('gridcell')).toHaveLength(16)
+  expect(screen.queryByRole('region', { name: 'Merged combat board' })).not.toBeInTheDocument()
   state = { ...state, state: 'PREPARATION', currentRound: 2, combatUnits: [] }
   update(); view.rerender(page())
   expect(screen.queryByRole('region', { name: 'Merged combat board' })).not.toBeInTheDocument()
   expect(screen.getAllByRole('gridcell')).toHaveLength(16)
+})
+
+it('holds pre-combat Keep HP until final effects settle and restores planning without animation wrappers', () => {
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(0)
+  try {
+    const view = render(page())
+    const origin = Date.parse('2026-10-05T12:00:00Z')
+    state = { ...state, state: 'ROUND_RESULT', yourKeepHp: 14, latestResolvedRound: 1,
+      clockSample: { serverAtReceipt: origin, receivedAt: 0 },
+      combatPresentation: { roundNumber: 1, startsAt: new Date(origin + 1000).toISOString(), combatEndsAt: new Date(origin + 2000).toISOString(), endsAt: new Date(origin + 4000).toISOString(), tickDurationMs: 250 } }
+    hook.combatRecording = { gameId: 'g', roundNumber: 1, events: [{ sequenceNumber: 1, tick: 4, type: 'COMBAT_ENDED', data: { reason: 'TIME_LIMIT' } }] }
+    hook.roundResult = { roundNumber: 1, outcome: 'TIME_LIMIT', keepDamage: { '0': 6, '1': 0 }, keepHpAfter: { '0': 14, '1': 20 }, endSnapshots: { '0': { survivors: [], keepHp: 14 }, '1': { survivors: [], keepHp: 20 } } }
+    update(); view.rerender(page())
+    expect(view.container.querySelector('.friendly-keep')).toHaveTextContent('20 HP')
+    expect(screen.queryByRole('region', { name: 'Last round result' })).not.toBeInTheDocument()
+    state = { ...state, clockSample: { serverAtReceipt: origin + 3000, receivedAt: 0 } }
+    update(); view.rerender(page())
+    expect(view.container.querySelector('.friendly-keep')).toHaveTextContent('14 HP')
+    expect(screen.getByRole('region', { name: 'Last round result' })).toBeInTheDocument()
+    state = { ...state, state: 'PREPARATION', currentRound: 2 }
+    update(); view.rerender(page())
+    expect(view.container.querySelector('.animated-grid')).toBeNull()
+    expect(screen.getAllByRole('gridcell')).toHaveLength(16)
+  } finally { clock.mockRestore() }
 })

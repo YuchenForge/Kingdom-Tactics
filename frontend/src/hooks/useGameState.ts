@@ -6,6 +6,7 @@ import { getRoundResult, isWrongGameState, matchesActiveRound } from '../api/gam
 import type { CommandResult, GameState } from '../types'
 import { useAuth } from './useAuth'
 import { useCombatEvents } from './useCombatEvents'
+import { usePresentedGameState } from './usePresentedGameState'
 import { getTimedGameState } from '../combat/playbackClock'
 
 function hardFailure(error: unknown) {
@@ -36,10 +37,10 @@ export function useGameState(gameId: string | undefined) {
     refetchInterval: (q) => {
       if (hardFailure(q.state.error) || notReady(q.state.error)) return false
       if (q.state.data?.state === 'FINISHED' || q.state.data?.state === 'WAITING_FOR_PLAYERS') return false
-      return 1000
+      return ['LOCKED', 'RESOLVING', 'ROUND_RESULT'].includes(q.state.data?.state ?? '') ? 250 : 1000
     },
   })
-  const state = query.data
+  const state = usePresentedGameState(query.data, gameId)
   const round = state?.latestResolvedRound
   const resultQuery = useQuery({
     queryKey: ['roundResult', gameId, round],
@@ -48,9 +49,9 @@ export function useGameState(gameId: string | undefined) {
     staleTime: Infinity,
     retry: (count, error) => !hardFailure(error) && count < 1,
   })
-  const eventRound = state?.state === 'ROUND_RESULT' && !hardFailure(query.error) && !notReady(query.error)
-    ? state.combatPresentation?.roundNumber ?? (state.latestResolvedRound === state.currentRound ? state.currentRound : null)
-    : null
+  // Start the same cancellable download before TX2 commits; the loader waits for complete=true.
+  const eventRound = state && ['LOCKED', 'RESOLVING', 'ROUND_RESULT'].includes(state.state)
+      && !hardFailure(query.error) && !notReady(query.error) ? state.currentRound : null
   const eventsQuery = useCombatEvents(gameId, eventRound)
   const handled = useRef('')
   useEffect(() => {
@@ -98,7 +99,8 @@ export function useGameState(gameId: string | undefined) {
     isLoading: !!gameId && query.isPending && !state,
     isReconnecting: query.isError && !hardFailure(query.error) && !notReady(query.error),
     error: query.error,
-    canMutate: !!gameId && query.isSuccess && state?.state === 'PREPARATION' && !state.isLocked,
+    canMutate: !!gameId && query.isSuccess && state?.state === 'PREPARATION' && query.data?.state === 'PREPARATION'
+      && state.currentRound === query.data.currentRound && !state.isLocked,
     isResolving: state?.state === 'RESOLVING',
     showDeadline: state?.state === 'PREPARATION' && state.planningDeadline != null,
     refetch: query.refetch,

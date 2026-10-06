@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useCombatPlayback } from './useCombatPlayback'
 import { getTimedGameState, playbackPosition } from '../combat/playbackClock'
 import { getState } from '../api/gameApi'
-import type { GameState } from '../types'
+import type { GameState, RoundResult } from '../types'
 import type { CombatRecording } from '../types/combat'
 
 vi.mock('../api/gameApi', () => ({ getState: vi.fn() }))
@@ -28,11 +28,11 @@ function setup(initialState = state, initialRecording: CombatRecording | undefin
 }
 function advance(time: number) { now = time; act(() => vi.advanceTimersByTime(32)) }
 
-it('samples server time at the request midpoint despite local wall-clock skew', async () => {
-  vi.mocked(getState).mockImplementation(async () => { now = 200; return { ...state, serverTime: new Date(origin).toISOString() } })
+it('does not advance response-assembly time by slow request processing', async () => {
+  vi.mocked(getState).mockImplementation(async () => { now = 5000; return { ...state, serverTime: new Date(origin).toISOString() } })
   vi.setSystemTime(new Date('2040-01-01'))
   const sampled = await getTimedGameState('g')
-  expect(sampled.clockSample).toEqual({ serverAtReceipt: origin + 100, receivedAt: 200 })
+  expect(sampled.clockSample).toEqual({ serverAtReceipt: origin, receivedAt: 5000 })
 })
 it('shows placements in lead-in, empty ticks, same-tick actions, final state and result interval', () => {
   const hook = setup()
@@ -47,6 +47,10 @@ it('shows placements in lead-in, empty ticks, same-tick actions, final state and
   advance(2000)
   expect(hook.result.current.position?.phase).toBe('result')
   expect(hook.result.current.frame?.units.b.dead).toBe(true)
+  expect(hook.result.current.presenting).toBe(true)
+  advance(2999)
+  expect(hook.result.current.presenting).toBe(true)
+  advance(3000)
   expect(hook.result.current.presenting).toBe(false)
   advance(4000)
   expect(hook.result.current.position?.phase).toBe('ended')
@@ -105,4 +109,14 @@ it('validates timing and supports tick-zero fights', () => {
   expect(() => playbackPosition({ ...timing, tickDurationMs: 0 }, origin)).toThrow()
   const empty = { ...timing, combatEndsAt: timing.startsAt }
   expect(playbackPosition(empty, origin + 1000)).toMatchObject({ phase: 'result', tick: 0 })
+})
+
+it('rejects a recording whose final survivors disagree with the authoritative round result', () => {
+  const badResult: RoundResult = { roundNumber: 1, outcome: 'PLAYER_VICTORY', keepDamage: {}, keepHpAfter: {},
+    endSnapshots: { '0': { survivors: [], keepHp: 30 }, '1': { survivors: [], keepHp: 20 } } }
+  const hook = renderHook(() => useCombatPlayback(state, recording, badResult))
+  expect(hook.result.current.error?.message).toContain('server result')
+  expect(hook.result.current.motion).toBeNull()
+  expect(hook.result.current.frame).toBeNull()
+  expect(vi.getTimerCount()).toBe(0)
 })

@@ -31,6 +31,7 @@ beforeEach(() => {
   vi.useFakeTimers(); vi.clearAllMocks()
   vi.mocked(api.getState).mockReset().mockResolvedValue(state)
   vi.mocked(api.getRoundResult).mockReset().mockResolvedValue(outcome)
+  vi.mocked(api.getCombatEventsPage).mockReset().mockResolvedValue({ roundNumber: 1, events: [], complete: false, hasMore: false, nextAfterSequence: 0 })
 })
 afterEach(() => { cleanup(); client?.clear(); vi.useRealTimers() })
 
@@ -140,4 +141,67 @@ it('discovers a resolved recording without observing resolving and cancels on pr
   await tick(1100)
   expect(hook.result.current.combatRecording).toBeUndefined()
   expect(hook.result.current.roundResult).toEqual(outcome)
+})
+
+
+it.each([1, 8])('loads round %s during resolving and retains it through the result window', async (round) => {
+  vi.mocked(api.getCombatEventsPage).mockResolvedValue({ roundNumber: round, events: [], complete: false, hasMore: false, nextAfterSequence: 0 })
+  vi.mocked(api.getState).mockResolvedValue({ ...state, currentRound: round, state: 'RESOLVING' })
+  const hook = setup(); await tick(50)
+  expect(api.getCombatEventsPage).toHaveBeenCalledWith('g', round, 0, expect.any(AbortSignal))
+  vi.mocked(api.getCombatEventsPage).mockResolvedValue({ roundNumber: round, events: [], complete: true, hasMore: false, nextAfterSequence: 0 })
+  vi.mocked(api.getState).mockResolvedValue({ ...state, currentRound: round, latestResolvedRound: round, state: 'ROUND_RESULT' })
+  await tick(1100)
+  expect(hook.result.current.combatRecording?.roundNumber).toBe(round)
+  expect(navigate).not.toHaveBeenCalled()
+  await tick(3000)
+  expect(hook.result.current.combatRecording?.roundNumber).toBe(round)
+  expect(navigate).not.toHaveBeenCalled()
+  vi.mocked(api.getState).mockResolvedValue({ ...state, currentRound: round, state: 'FINISHED' })
+  await tick(300)
+  expect(navigate).toHaveBeenCalledWith('/games/g/result', { replace: true })
+})
+
+
+it('defers the results-page redirect until an observed final presentation ends', async () => {
+  let localNow = 0
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => localNow)
+  try {
+    const origin = Date.parse('2026-10-06T12:00:00Z')
+    vi.mocked(api.getState).mockResolvedValue({ ...state, state: 'ROUND_RESULT', currentRound: 8,
+      serverTime: new Date(origin).toISOString(),
+      combatPresentation: { roundNumber: 8, startsAt: new Date(origin).toISOString(),
+        combatEndsAt: new Date(origin + 2000).toISOString(), endsAt: new Date(origin + 6000).toISOString(), tickDurationMs: 250 } })
+    vi.mocked(api.getCombatEventsPage).mockResolvedValue({ roundNumber: 8, events: [], complete: true, hasMore: false, nextAfterSequence: 0 })
+    const hook = setup(); await tick(50)
+    localNow = 1500
+    vi.mocked(api.getState).mockResolvedValue({ ...state, state: 'FINISHED', currentRound: 8,
+      serverTime: new Date(origin + 6000).toISOString(), combatPresentation: null })
+    await tick(300)
+    expect(hook.result.current.phase).toBe('ROUND_RESULT')
+    expect(hook.result.current.combatRecording?.roundNumber).toBe(8)
+    expect(hook.result.current.canMutate).toBe(false)
+    expect(navigate).not.toHaveBeenCalled()
+    localNow = 5999; await tick(32)
+    expect(navigate).not.toHaveBeenCalled()
+    localNow = 6000; await tick(32)
+    expect(navigate).toHaveBeenCalledWith('/games/g/result', { replace: true })
+  } finally { clock.mockRestore() }
+})
+
+it('loads a fresh recording when round one is followed by round two', async () => {
+  vi.mocked(api.getCombatEventsPage).mockImplementation(async (_game, round) => ({ roundNumber: round, events: [], complete: true, hasMore: false, nextAfterSequence: 0 }))
+  vi.mocked(api.getState).mockResolvedValue({ ...state, state: 'ROUND_RESULT', latestResolvedRound: 1 })
+  const hook = setup(); await tick(50)
+  expect(hook.result.current.combatRecording?.roundNumber).toBe(1)
+  vi.mocked(api.getState).mockResolvedValue({ ...state, currentRound: 2, latestResolvedRound: 1 })
+  await tick(300)
+  expect(hook.result.current.combatRecording).toBeUndefined()
+  vi.mocked(api.getState).mockResolvedValue({ ...state, state: 'RESOLVING', currentRound: 2, latestResolvedRound: 1 })
+  await tick(1100)
+  expect(hook.result.current.combatRecording?.roundNumber).toBe(2)
+  vi.mocked(api.getState).mockResolvedValue({ ...state, state: 'ROUND_RESULT', currentRound: 2, latestResolvedRound: 2 })
+  await tick(300)
+  expect(hook.result.current.combatRecording?.roundNumber).toBe(2)
+  expect(api.getCombatEventsPage).toHaveBeenCalledWith('g', 2, 0, expect.any(AbortSignal))
 })

@@ -1,6 +1,8 @@
 import InterfaceIcon from '../components/InterfaceIcon'
 import PlanningTimer from '../components/PlanningTimer'
 import CombatBoard from '../components/CombatBoard'
+import AnimatedCombatBoard from '../components/AnimatedCombatBoard'
+import type { PlanningBounds } from '../components/AnimatedCombatBoard'
 import { useLayoutEffect, useRef, useState } from 'react'
 import * as api from '../api/gameApi'
 import PlanningControls from '../components/PlanningControls'
@@ -17,8 +19,37 @@ export default function GameBoardPage() {
   const auth = useAuth()
   const game = useGameState(gameId)
   const state = game.state
-  const playback = useCombatPlayback(state, game.combatRecording)
+  const playback = useCombatPlayback(state, game.combatRecording, game.roundResult)
   const result = game.roundResult
+  const pageRef = useRef<HTMLElement>(null)
+  const [planningBounds, setPlanningBounds] = useState<PlanningBounds>()
+  const waitingForCombat = !!state && (state.state === 'LOCKED' || state.state === 'RESOLVING'
+    || (state.state === 'ROUND_RESULT' && !!state.combatPresentation && !playback.motion && !playback.error && !game.combatEventsError))
+  const showPlanning = state?.state === 'PREPARATION' || waitingForCombat
+  useLayoutEffect(() => {
+    if (!showPlanning) return
+    const board = pageRef.current?.querySelector('.board-grid')
+    if (!board) return
+    const measure = () => {
+      const { left, top, width, height } = board.getBoundingClientRect()
+      if (!width || !height) return
+      setPlanningBounds(old => old?.left === left && old.top === top && old.width === width && old.height === height
+        ? old : { left, top, width, height })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure)
+    observer?.observe(board)
+    return () => { window.removeEventListener('resize', measure); observer?.disconnect() }
+  }, [showPlanning, state?.currentRound])
+
+  const [keepBefore, setKeepBefore] = useState<{ gameId: string; round: number; yours: number; theirs: number } | null>(null)
+  if (state && state.state !== 'ROUND_RESULT' && (keepBefore?.gameId !== state.gameId
+      || keepBefore.round !== state.currentRound || keepBefore.yours !== state.yourKeepHp || keepBefore.theirs !== state.opponentKeepHp)) {
+    setKeepBefore({ gameId: state.gameId, round: state.currentRound, yours: state.yourKeepHp, theirs: state.opponentKeepHp })
+  }
+  const displayState = state && playback.presenting && keepBefore?.gameId === state.gameId && keepBefore.round === state.currentRound
+    ? { ...state, yourKeepHp: keepBefore.yours, opponentKeepHp: keepBefore.theirs } : state
   const [selection, setSelection] = useState<Selection | null>(null)
   const [inspection, setInspection] = useState<Inspection>(null)
   const [pending, setPending] = useState(false)
@@ -73,7 +104,7 @@ export default function GameBoardPage() {
     void run({ gameId, round: state.currentRound, key: api.newIdempotencyKey(), action })
   }
   if (!gameId) return <main><h1>Game not found</h1><Link to="/">Home</Link></main>
-  return <main className="game-page"><header className="game-topbar"><Link to="/">Home</Link><h1>Game board</h1><button className="text-action" onClick={auth.logout}>Log out</button></header><p className="game-id">Game id: {gameId}</p>
+  return <main ref={pageRef} className="game-page"><header className="game-topbar"><Link to="/">Home</Link><h1>Game board</h1><button className="text-action" onClick={auth.logout}>Log out</button></header><p className="game-id">Game id: {gameId}</p>
     {game.isLoading && <p role="status">Loading game…</p>}
     {game.isReconnecting && <p role="alert">Reconnecting… Actions are disabled until the connection recovers.</p>}
     {game.error && !game.isReconnecting && <p role="alert">{game.error instanceof ApiError ? game.error.message : 'Could not load the game.'}</p>}
@@ -84,8 +115,10 @@ export default function GameBoardPage() {
     </section>}
     {error && <p role="alert">{error}</p>}
     {retry && <div><button disabled={pending || !!unavailable} onClick={() => void run(retry)}>Retry same action</button><button disabled={pending} onClick={() => setRetry(null)}>Dismiss retry</button><p>The previous action may have succeeded. Retry uses its original request key.</p></div>}
-    {state && (state.state === 'RESOLVING' || state.state === 'ROUND_RESULT' || state.state === 'LOCKED') && <CombatBoard state={state} frame={playback.frame} playbackPhase={playback.position?.phase} />}
-    {state && state.state === 'PREPARATION' && <PlanningControls state={state} selected={selected} inspected={inspection} reason={reason}
+    {state && !showPlanning && (state.state === 'RESOLVING' || state.state === 'ROUND_RESULT' || state.state === 'LOCKED') && (playback.motion && playback.position && displayState
+      ? <AnimatedCombatBoard key={`${state.gameId}:${state.currentRound}`} state={displayState} planningBounds={planningBounds} motion={playback.motion} elapsed={playback.elapsed} merge={playback.merge} resultReady={playback.resultReady} />
+      : <CombatBoard state={state} frame={playback.frame} playbackPhase={playback.position?.phase} />)}
+    {state && showPlanning && <PlanningControls state={state} selected={selected} inspected={inspection} reason={reason}
       onSelect={(unit) => setSelection({ id: unit.id, level: unit.level, gameId, round: state.currentRound })}
       onInspect={setInspection} onAction={act} onLock={() => act({ type: 'lock' })} />}
     {game.isLoadingCombatEvents && <p role="status">Loading combat…</p>}

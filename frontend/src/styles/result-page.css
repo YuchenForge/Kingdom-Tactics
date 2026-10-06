@@ -1,31 +1,48 @@
 /* Scoped result presentation; shared auth/lobby forms keep their layout. */
-.result-page { max-width:720px; box-sizing:border-box; padding:32px; margin:32px auto; border:1px solid var(--kt-border); }
+.result-page { max-width:720px; box-sizing:border-box; width:min(720px,calc(100% - 24px)); padding:20px 24px; margin:12px auto; border:1px solid var(--kt-border); }
 .result-page > h1 { font-size:16px; color:var(--kt-muted); margin:0; }
-.result-game-id { font-size:11px; color:var(--kt-muted); overflow-wrap:anywhere; margin:6px 0 24px; }
 .result-page [aria-label="Final match outcome"] { text-align:center; margin:0; }
 .result-outcome { font-size:clamp(32px,6vw,48px); font-weight:700; margin:0; line-height:1.2; color:var(--kt-gold); }
 .result-outcome.defeat { color:var(--kt-opponent); }
 .result-outcome.draw { color:var(--kt-friendly); }
-.result-page [aria-label="Final match outcome"] > p { margin:10px 0 20px; overflow-wrap:anywhere; }
+.result-page [aria-label="Final match outcome"] > p { margin:6px 0 10px; font-size:14px; overflow-wrap:anywhere; }
 .result-meta { display:flex; flex-wrap:wrap; justify-content:center; gap:8px 24px; color:var(--kt-muted); font-size:13px; }
 .result-meta p { margin:0; }
-.result-page h3 { font-size:12px; color:var(--kt-muted); margin:24px 0 10px; }
+.result-page h3 { font-size:12px; color:var(--kt-muted); margin:12px 0 8px; }
 .result-keeps { list-style:none; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:0; margin:0; }
-.result-keeps li { display:flex; flex-direction:column; align-items:center; gap:10px; padding:18px 12px; background:var(--kt-bg); border:1px solid var(--kt-border); border-radius:8px; font-weight:600; overflow-wrap:anywhere; }
-.result-keeps img { width:64px; height:64px; }
+.result-keeps li { display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px; background:var(--kt-bg); border:1px solid var(--kt-border); border-radius:8px; font-weight:600; overflow-wrap:anywhere; }
+.result-keeps img { width:48px; height:48px; }
 .your-result-keep { color:var(--kt-friendly); }
 .opponent-result-keep { color:var(--kt-opponent); }
-.result-play-again { border-top:1px solid var(--kt-border); padding-top:24px; margin:24px 0; }
+.result-play-again { border-top:1px solid var(--kt-border); padding-top:12px; margin:14px 0 10px; }
 .result-play-again h2 { font-size:18px; font-weight:600; margin:0; }
-.result-play-again > p { color:var(--kt-muted); font-size:13px; margin:6px 0 16px; }
+.result-play-again > p { color:var(--kt-muted); font-size:13px; margin:4px 0 10px; }
 .result-play-again section { margin:0; }
-.result-play-again .create-action > button { width:100%; margin:0 0 16px; border-color:var(--kt-friendly); }
-.result-play-again form { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:end; margin:0; }
+.result-play-again .create-action > button { width:100%; margin:0; border-color:var(--kt-friendly); }
+.result-play-again form { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; margin:0; }
 .result-play-again label { margin:0; font-size:12px; }
 .result-play-again input { box-sizing:border-box; }
 .result-play-again form button { margin:0; }
 .result-page > a { display:block; text-align:center; font-size:13px; }
-@media(max-width:540px) { .result-page { margin:16px; padding:20px; } .result-play-again form { grid-template-columns:1fr; } }
 
 .result-keeps small { font-size:12px; font-weight:400; color:var(--kt-muted); }
 .defeated-keep img { opacity:.45; filter:grayscale(1); }
+
+/* A compact result card, with the same create/join actions as the landing page. */
+.result-page .match-details { margin:4px 0 10px; }
+.result-play-again .game-actions { display:grid; grid-template-columns:140px minmax(0,1fr); align-items:end; gap:12px; }
+.result-play-again input, .result-play-again button { min-height:42px; padding:8px 10px; }
+.result-play-again [role="alert"] { grid-column:1/-1; margin:0; font-size:12px; }
+@media(max-width:540px) {
+  .result-page { padding:16px; }
+  .result-play-again .game-actions { grid-template-columns:1fr; gap:8px; }
+  .result-play-again .create-action > button { width:100%; }
+}
+@media(max-height:650px) and (min-width:541px) {
+  .result-page { padding:12px 20px; margin:8px auto; }
+  .result-outcome { font-size:32px; }
+  .result-keeps img { width:36px; height:36px; }
+  .result-keeps li { padding:6px; }
+  .result-page h3 { margin:8px 0 4px; }
+  .result-play-again { margin:10px 0 8px; padding-top:8px; }
+}

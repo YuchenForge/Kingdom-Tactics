@@ -261,8 +261,8 @@ class RoundResolutionJobIT extends AbstractPostgresIT {
     private void assertPresentationThenAdvance(Fixture fixture) {
         Round pending = roundRepository.findById(fixture.roundId()).orElseThrow();
         assertThat(pending.getAdvancedAt()).isNull();
-        assertThat(pending.getPresentationStartsAt()).isEqualTo(pending.getFinishedAt().plusSeconds(1));
-        assertThat(pending.getPresentationEndsAt()).isEqualTo(pending.getCombatEndsAt().plusSeconds(2));
+        assertThat(pending.getPresentationStartsAt()).isEqualTo(pending.getFinishedAt().plusSeconds(3));
+        assertThat(pending.getPresentationEndsAt()).isEqualTo(pending.getCombatEndsAt().plusSeconds(4));
         assertThat(pending.getTickDurationMs()).isEqualTo(250);
         assertThat(gameRepository.findById(fixture.gameId()).orElseThrow().getState())
                 .isEqualTo(GameStates.ROUND_RESULT);

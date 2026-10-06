@@ -1,16 +1,19 @@
 import type { CombatPresentation } from '../types'
 import { getState } from '../api/gameApi'
 
-/** Client-only sample: server time estimated at receipt, anchored to a monotonic clock. */
+/** Response-assembly server time anchored to receipt on a monotonic clock.
+ * Do not add half the request duration: it includes server/DB work that already
+ * happened before serverTime was stamped. That can skip whole ticks on cold loads.
+ * Receipt anchoring conservatively lags by response transit time instead.
+ */
 export type ServerClockSample = { serverAtReceipt: number; receivedAt: number }
 
 export async function getTimedGameState(gameId: string) {
-  const sentAt = performance.now()
   const state = await getState(gameId)
   const receivedAt = performance.now()
   const serverTime = Date.parse(state.serverTime ?? '')
   if (!Number.isFinite(serverTime)) return state
-  return { ...state, clockSample: { serverAtReceipt: serverTime + (receivedAt - sentAt) / 2, receivedAt } }
+  return { ...state, clockSample: { serverAtReceipt: serverTime, receivedAt } }
 }
 
 export function serverNow(sample: ServerClockSample, localNow: number): number {

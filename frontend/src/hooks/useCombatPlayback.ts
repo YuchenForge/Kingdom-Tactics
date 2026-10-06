@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { GameState } from '../types'
+import type { GameState, RoundResult } from '../types'
 import type { CombatRecording } from '../types/combat'
-import { combatStateAtTick, reconstructCombat } from '../combat/combatState'
+import { combatStateAtTick, reconstructCombat, matchesRoundResult } from '../combat/combatState'
+import { buildCombatMotion } from '../combat/combatMotion'
 import { playbackPosition, serverNow } from '../combat/playbackClock'
 
 /** Read the shared timeline directly. Missing time never starts a local replay from zero. */
-export function useCombatPlayback(state: GameState | undefined, recording: CombatRecording | undefined) {
+export function useCombatPlayback(state: GameState | undefined, recording: CombatRecording | undefined, result?: RoundResult) {
   const [localNow, setLocalNow] = useState(() => performance.now())
   const gameId = state?.gameId
   const roundNumber = state?.currentRound
@@ -25,8 +26,14 @@ export function useCombatPlayback(state: GameState | undefined, recording: Comba
     }
   }, [recording, gameId, roundNumber, phase])
 
+  const timeline = reconstructed?.timeline
+  const motion = useMemo(() => timeline && timing ? buildCombatMotion(timeline, timing.tickDurationMs) : null,
+    [timeline, timing])
   let position: ReturnType<typeof playbackPosition> | null = null
   let error = reconstructed?.error ?? null
+  if (!error && timeline && result && result.roundNumber === roundNumber && !matchesRoundResult(timeline.final, result)) {
+    error = new Error('Recorded combat does not match the server result.')
+  }
   try {
     if (timing && sample) position = playbackPosition(timing, serverNow(sample, Math.max(localNow, sample.receivedAt)))
   } catch (failure) {
@@ -48,12 +55,15 @@ export function useCombatPlayback(state: GameState | undefined, recording: Comba
     }
   }, [active, state?.gameId, state?.currentRound])
 
-  const timeline = reconstructed?.timeline
   const frame = !error && timeline && position
     ? position.phase === 'result' || position.phase === 'ended' ? timeline.final
       : combatStateAtTick(timeline, position.tick)
     : null
-  return { frame, position, error,
+  const elapsed = timing && sample ? serverNow(sample, Math.max(localNow, sample.receivedAt)) - Date.parse(timing.startsAt) : 0
+  const resultReady = !position || position.phase === 'ended'
+    || (position.phase === 'result' && (!motion || elapsed >= motion.settleAt))
+  return { frame, position, error, motion: error ? null : motion, elapsed,
+    merge: Math.max(0, Math.min(1, (elapsed + 1000) / 1000)), resultReady,
     // Hide this round's result until its shared result interval, including while events load.
-    presenting: !error && !!position && (position.phase === 'lead-in' || position.phase === 'combat') }
+    presenting: !error && !!position && !resultReady }
 }

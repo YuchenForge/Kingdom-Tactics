@@ -125,9 +125,9 @@ class ResolveServiceTest {
         assertThat(round.getOutcome()).isEqualTo("DRAW");
         assertThat(round.getKeepDamage()).isEqualTo(Map.of("0", 2, "1", 3));
         assertThat(round.getFinishedAt()).isEqualTo(NOW);
-        assertThat(round.getPresentationStartsAt()).isEqualTo(NOW.plusSeconds(1));
-        assertThat(round.getCombatEndsAt()).isEqualTo(NOW.plusMillis(1000L + finalTick * 250L));
-        assertThat(round.getPresentationEndsAt()).isEqualTo(NOW.plusMillis(3000L + finalTick * 250L));
+        assertThat(round.getPresentationStartsAt()).isEqualTo(NOW.plusSeconds(3));
+        assertThat(round.getCombatEndsAt()).isEqualTo(NOW.plusMillis(3000L + finalTick * 250L));
+        assertThat(round.getPresentationEndsAt()).isEqualTo(NOW.plusMillis(7000L + finalTick * 250L));
         assertThat(round.getTickDurationMs()).isEqualTo(250);
         assertThat(round.getAdvancedAt()).isNull();
         // round_plans are only read for gold — never saved/mutated in TX2
