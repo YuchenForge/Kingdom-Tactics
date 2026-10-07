@@ -1,4 +1,7 @@
-target/
+**/target
+**/.env*
+**/*.log
+.git
 .idea/
 *.iml
 .classpath

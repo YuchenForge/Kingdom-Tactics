@@ -26,11 +26,11 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Run backend tests
+      - name: Test and build backend
         working-directory: backend
         # -B: batch mode. Reactor order builds api before worker (*IT + Flyway on classpath).
         # Docker is available on ubuntu-latest for Testcontainers; leave Ryuk enabled by default.
-        run: mvn -B test
+        run: mvn -B verify
 
       - name: Upload surefire reports on failure
         if: failure()
@@ -38,4 +38,3 @@ jobs:
         with:
           name: surefire-reports
           path: backend/*/target/surefire-reports/
-          # No JaCoCo gates / frontend / Playwright until Phase 7

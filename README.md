@@ -4,7 +4,7 @@ A deployable, server-authoritative 1v1 turn-based tactical auto-battler. Players
 
 This project is designed to showcase transactional backends, deterministic domain engines, secure command processing, and production-grade observability.
 
-**Status:** Phase 6 complete as of 2026-10-07. Implementation and automated checks are complete; the user confirmed two-browser automatic combat, deadline expiry, reload, return to planning, and final result. Phase 7 is next.
+**Status:** Phase 6 complete as of 2026-10-07. Implementation and automated checks are complete; the user confirmed two-browser automatic combat, deadline expiry, reload, return to planning, and final result. Phase 7 local-stack setup is in progress.
 
 ---
 
@@ -48,29 +48,73 @@ This project is designed to showcase transactional backends, deterministic domai
 
 ## Getting started
 
-### Prerequisites
+### Full local stack (Docker only)
 
-- Java 21
-- Node.js 20.19+ or 22.12+ (Vite; see [Vite guide](https://vite.dev/guide/))
-- Docker & Docker Compose
-- PostgreSQL 15+ (via Compose)
-
-### Local development
-
-See **[`docs/local-setup.md`](docs/local-setup.md)** for the current commands. Summary:
+Install Docker with Docker Compose and start Docker. From a fresh checkout, run:
 
 ```bash
-git clone <repo-url> && cd kingdomTactics
-docker compose up -d postgres          # Postgres only (API owns Flyway)
-cd backend
-mvn -pl api -am test                   # *Test + *IT (Docker for ITs)
-mvn install -DskipTests                # install modules to local .m2
-mvn -pl api spring-boot:run            # API on :8080 — runs migrations
-# other terminal (still in backend), after API has migrated:
-mvn -pl worker spring-boot:run         # or: docker compose up -d worker
+docker compose up --build -d --wait
 ```
 
-The Phase 5 frontend is available in `frontend/` (see its [setup guide](frontend/README.md)). Compose defines Postgres + worker; start the worker only after the API has applied migrations. Do not combine `-am` with `spring-boot:run`. Full stack (API + frontend + worker) is Phase 7.
+Open **http://localhost:5173**. Use two browsers or an incognito window to register
+separate accounts and play. No local Java, Maven, Node, or `.env` file is required.
+The first build downloads dependencies and may take several minutes.
+
+Compose starts PostgreSQL, then the API (which applies Flyway migrations), then
+the worker and frontend after the API's database-backed `/health` check passes.
+The frontend serves a production build and proxies `/api` to the API, so browser
+requests stay on the same origin. Nested page URLs also work after refresh.
+The worker has no HTTP health endpoint; `--wait` confirms it is running, while
+playing a round verifies processing.
+
+```bash
+docker compose ps
+docker compose logs -f api worker
+curl --fail http://localhost:8080/health
+docker compose down
+```
+
+Stopping preserves accounts and matches in the `postgres_data` volume. The API
+applies pending migrations on the next start; the worker does not run migrations.
+Do not change the Compose project name if you want to reuse an existing volume.
+`docker compose down --volumes` permanently deletes that project's local game data;
+use it only when intentionally resetting a disposable database. A migration checksum
+error on an old pre-production database requires investigating its history or an
+intentional reset, not simply restarting containers.
+
+Ports default to frontend 5173, API 8080, and database 5432, bound to localhost.
+To avoid other running development services, override them for the command:
+
+```bash
+KT_WEB_PORT=5174 KT_API_PORT=8081 KT_DB_PORT=5433 docker compose up --build -d --wait
+```
+
+Use the same overrides for subsequent Compose commands. These are the only optional
+Compose settings; all database credentials and the JWT secret are disposable local
+defaults defined in `docker-compose.yml`, unsuitable for public deployment. Existing
+root or frontend `.env` secrets are not copied into images. After editing source,
+rerun the startup command to rebuild; container mode does not hot reload.
+
+### Development with hot reload
+
+Requires Java 21, Maven 3.9+, and Node.js 22.12+ in addition to Docker.
+Stop the full Compose stack before running host services on the same ports.
+
+```bash
+docker compose up -d postgres
+cd backend
+mvn install -DskipTests
+mvn -pl api spring-boot:run
+# Another terminal in backend/, once the API has started:
+mvn -pl worker spring-boot:run
+# Another terminal in frontend/:
+npm ci
+npm run dev
+```
+
+Use `VITE_API_BASE_URL=/api` (the default); Vite proxies requests to port 8080.
+Do not combine `-am` with `spring-boot:run`. When running the API on the host,
+run the worker on the host too: the Compose worker depends on the Compose API.
 
 ---
 
@@ -177,7 +221,7 @@ curl http://localhost:8080/api/games/{gameId}/state \
 
 ### Health checks
 
-Planned in Phase 7 (`/health`). Today, verify the API with auth/`/api/me` as in `docs/local-setup.md`.
+`GET /health` reports API and database health without authentication or internal details. Compose waits for it before starting the worker and frontend.
 
 ---
 
