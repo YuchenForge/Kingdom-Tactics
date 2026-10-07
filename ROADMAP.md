@@ -291,7 +291,7 @@ Worker TX pipeline + Phase 4 read APIs are shipped. `ROUND_RESULT` is a durable 
 
 ## Phase 5: Frontend MVP
 
-**Status:** Implemented — final acceptance pending (2026-10-01).
+**Status:** ✅ Complete
 
 **Goal:** Make the game playable without compromising backend correctness.
 
@@ -352,26 +352,30 @@ Two people can play a complete 8-round match in separate browser sessions. Fully
 
 ## Phase 6: Automatic combat animation
 
-**Status:** Ready to begin implementation. Standalone motion preview approved 2026-10-02; production animation and server timing not started.
+**Status:** ✅ Complete. Automated checks passed, and the user confirmed live two-browser acceptance.
 
 **Goal:** At preparation end, show tick-by-tick combat on the merged board, followed by outcome/Keep damage, then the next preparation or match result.
 
-### Build
+### Implemented scope
 
 - Reuse event pagination, enriched UNIT_PLACED, historical end snapshots, and the static landscape CombatBoard.
 - Add persisted server-controlled presentation timing to ROUND_RESULT. Gate TX3 until it ends, including the final match transition. No browser acknowledgment or long-running transaction.
 - Give the next preparation its full 45 seconds after actual advancement.
-- Timing defaults: 1-second lead-in for board merge, 250 ms per logical tick, 2-second result interval including final effect settling. Finalize timestamp semantics with the API contract; no effect extends the server deadline.
+- Implemented timing: 3-second lead-in, 250 ms per logical tick, then 1 second for final effects and 3 seconds for results. The last 2200 ms of lead-in shrink the planning board for 1200 ms, then flip/merge for 1000 ms; no effect extends the server deadline.
 - Port the approved board spin/merge, HP-before-bar layout, differentiated attacks/reactions, primary-target Mage shockwave, Healer trail, movement bounce and death finish. Use small within-tick offsets while preserving recorded sequence.
 - Keep pure event state separate from displayed HP; synchronize feedback with impact and cancel stale effects on catch-up/round change.
 - Fetch the complete recorded event sequence and animate movement, attacks, heals, and deaths automatically. The browser never simulates combat.
-- Recover the shared current tick after reload/background/reconnect; discard obsolete presentation when the live round advances.
+- Recover the shared current tick after reload/background/reconnect. Preserve an observed round’s original clock/window against polling jumps and early phase changes; release it at its persisted deadline.
+- Show authoritative outcome and Keep feedback after effects settle; use saved final snapshots if event playback fails. Restore planning from server state and suppress stale round results during later combat.
 - Preserve polling, both viewer orientations, and reduced-motion access.
 - No ReplayPage, Watch round overlay, or Play/Pause/Restart controls required.
 
 ### Verification
 
-Focused worker timing/recovery tests, event reducer/snapshot tests, pagination/clock tests, and a two-browser automatic-combat flow. Reuse existing Phase 5 coverage.
+All seven implementation steps are present. Existing Step 7 verification passed 165 frontend tests (13 files), production TypeScript/Vite build, lint, and 15 worker database integration tests. Fixture-based browser review covered both seats, narrow layouts, and reduced motion.
+
+- [x] Automated timing, pagination, reconstruction, playback, animation, and round-flow checks.
+- [x] Live two-browser acceptance: automatic combat, deadline expiry, reload, return to planning, and final result. Confirmed by the user on 2026-10-07; this is user-reported verification, separate from automated test evidence.
 
 ### Definition of done
 
@@ -383,7 +387,7 @@ Implementation details and checklist: `backend/docs/PHASE_6_GUIDE.md` and `backe
 
 ## Phase 7: Quality, deployment, and portfolio polish
 
-**Status:** Planned (after Phase 6)
+**Status:** Ready to begin 
 
 **Goal:** Make it credible as a production-style project.
 
@@ -422,48 +426,6 @@ Someone can open the live URL, create an account, play (invite a friend), watch 
 
 - Playwright end-to-end happy path (create game, play 2 rounds, verify result)
 - Integration test with all services (docker-compose up, run test, docker-compose down)
-
----
-
-## Phase 8: Choose one expansion
-
-**Status:** Planned (after Phase 7)
-
-Pick **one** expansion. This demonstrates ability to extend a system without breaking existing code.
-
-### Options
-
-| Option | What it demonstrates | Effort |
-|--------|----------------------|--------|
-| **WebSockets** | Real-time delivery, reconnect/catch-up, stateful server connections | Medium |
-| **Traits/synergies** | Extensible rules engine, composition patterns, data-driven design | Medium |
-| **Matchmaking + ELO** | Queues, ranking systems, aggregation, background job orchestration | Medium-High |
-| **Spectator mode** | Public/private state boundaries, permission systems, live feeds | Medium |
-| **Admin dashboard** | Operational tooling, analytics, filters, exports, data inspection | Medium-High |
-| **Bot API** | Public API design, rate limits, API docs, simulation, external integrations | Medium |
-| **OAuth + email invites** | Third-party authentication, async email, invitation flows | Low-Medium |
-
----
-
-## Timeline
-
-Assumes 2-3 weeks per phase if working full-time:
-
-| Phase | Duration | Total |
-|-------|----------|-------|
-| 0 (Design) | 1 week | 1 week |
-| 1 (Engine) | 2 weeks | 3 weeks |
-| 2 (Backend) | 2 weeks | 5 weeks |
-| 3 (Commands) | 2 weeks | 7 weeks |
-| 4 (Worker) | 2 weeks | 9 weeks |
-| 5 (Frontend) | 2 weeks | 11 weeks |
-| 6 (Combat animation) | 1 week | 12 weeks |
-| 7 (Deploy) | 1 week | 13 weeks |
-| 8 (Expansion) | 2-3 weeks | 16 weeks |
-
-**Total:** ~4 months for a complete, production-ready project.
-
-If working part-time, double or triple each estimate.
 
 ---
 

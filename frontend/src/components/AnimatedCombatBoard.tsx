@@ -1,7 +1,7 @@
 import '../styles/combat-preview.css'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import type { GameState } from '../types'
+import type { GameState, RoundResult } from '../types'
 import type { CombatMotion, CombatCue } from '../combat/combatMotion'
 import { clamp01, cueSource, cueTarget, displayPoint, sampleCombatMotion } from '../combat/combatMotion'
 import { useReducedMotion } from '../hooks/useReducedMotion'
@@ -76,8 +76,8 @@ function Effects({ cues, time, size, seat, reduced }: { cues: CombatCue[]; time:
   </svg>
 }
 
-export default function AnimatedCombatBoard({ state, motion, elapsed, merge, resultReady, planningBounds }: {
-  state: GameState; motion: CombatMotion; elapsed: number; merge: number; resultReady: boolean; planningBounds?: PlanningBounds
+export default function AnimatedCombatBoard({ state, motion, elapsed, merge, resultReady, planningBounds, result }: {
+  state: GameState; motion: CombatMotion; elapsed: number; merge: number; resultReady: boolean; planningBounds?: PlanningBounds; result?: RoundResult
 }) {
   const reduced = useReducedMotion()
   const ref = useRef<HTMLDivElement>(null)
@@ -101,13 +101,17 @@ export default function AnimatedCombatBoard({ state, motion, elapsed, merge, res
   const outcome = motion.timeline.final.outcome
   const victory = outcome === 'PLAYER_VICTORY' ? state.yourSeat === 0 : outcome === 'ENEMY_VICTORY' ? state.yourSeat === 1 : null
   const title = merge < 1 ? 'Formations locked' : !resultReady ? 'Combat' : victory === null ? (outcome === 'DRAW' ? 'Draw' : 'Time limit') : victory ? 'Victory' : 'Defeat'
+  const keepFeedback = (seat: number) => resultReady && result?.roundNumber === state.currentRound
+    ? <small className="keep-damage" aria-label={`${seat === state.yourSeat ? 'Your' : 'Opponent'} Keep damage`}>
+      {result.keepDamage[String(seat)] > 0 ? `−${result.keepDamage[String(seat)]} HP` : 'No damage'}
+    </small> : null
   const total = state.combatPresentation
     ? Date.parse(state.combatPresentation.endsAt) - Date.parse(state.combatPresentation.startsAt)
     : motion.settleAt + 3000
   return <section className="combat-frame motion-frame" aria-label="Merged combat board">
     <div className="motion-framehead"><h2>{title}</h2><span>Round {state.currentRound}</span></div>
     <div className="combat-field">
-      <aside className="keep friendly-keep"><img src="/assets/keep/keep.svg" alt="" /><strong>Your Keep</strong><span>{state.yourKeepHp} HP</span></aside>
+      <aside className="keep friendly-keep"><img src="/assets/keep/keep.svg" alt="" /><strong>Your Keep</strong><span>{state.yourKeepHp} HP</span>{keepFeedback(state.yourSeat)}</aside>
       <div ref={ref} style={{ width: '100%', maxWidth: planningBounds ? planningBounds.width * 1.75 : undefined, justifySelf: 'center' }} className={`animated-grid ${progress < 1 ? 'merging' : ''}`} role="grid" aria-label="Eight columns by four rows">
         {Array.from({ length: 4 }, (_, row) => <div className="animated-row" role="row" key={row}>
           {Array.from({ length: 8 }, (_, col) => {
@@ -158,7 +162,7 @@ export default function AnimatedCombatBoard({ state, motion, elapsed, merge, res
         })}
         <Effects cues={sample.effects} time={sample.time} size={size} seat={state.yourSeat} reduced={reduced} />
       </div>
-      <aside className="keep opponent-keep"><img src="/assets/keep/keep.svg" alt="" /><strong>Opponent</strong><span>{state.opponentKeepHp} HP</span></aside>
+      <aside className="keep opponent-keep"><img src="/assets/keep/keep.svg" alt="" /><strong>Opponent</strong><span>{state.opponentKeepHp} HP</span>{keepFeedback(1 - state.yourSeat)}</aside>
     </div>
     <div className="motion-framefoot"><span role="status">{merge < 1 ? elapsed < -1000 ? 'Your formation takes its place on the battlefield.' : 'Both formations rotate and join the battlefield.' : resultReady ? 'Round resolved' : 'The battle is underway.'}</span><span>{merge < 1 ? 'Preparing combat…' : `Tick ${Math.min(motion.timeline.final.tick, Math.max(0, Math.floor(elapsed / (state.combatPresentation?.tickDurationMs ?? 250))))} / ${motion.timeline.final.tick}`}</span></div>
     <div className="motion-progress" aria-hidden="true"><i style={{ width: `${clamp01((elapsed + 1000) / (total + 1000)) * 100}%` }} /></div>

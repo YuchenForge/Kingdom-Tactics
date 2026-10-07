@@ -160,3 +160,10 @@
 
 .combat-health { position: absolute; bottom: 3px; left: 5%; width: 90%; display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .combat-health meter { width: 100%; min-width: 0; height: 8px; }
+
+/* Round outcome stays compact beside the authoritative Keep totals. */
+.round-summary { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 0; border-top:1px solid var(--kt-border); }
+.round-summary p { margin:4px 0; font-size:13px; }
+.round-summary h2 { color:var(--kt-friendly); }
+.round-keep-results { text-align:right; }
+@media(max-width:540px) { .round-summary { align-items:flex-start; flex-direction:column; } .round-keep-results { text-align:left; } }

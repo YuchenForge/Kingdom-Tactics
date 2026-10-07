@@ -4,7 +4,7 @@ A deployable, server-authoritative 1v1 turn-based tactical auto-battler. Players
 
 This project is designed to showcase transactional backends, deterministic domain engines, secure command processing, and production-grade observability.
 
-**Status:** Phase 5 implemented; result/play-again browser flow verified; full backend CI rerun and live eight-round sign-off pending. Ready to begin Phase 6 automatic combat animation development.
+**Status:** Phase 6 complete as of 2026-10-07. Implementation and automated checks are complete; the user confirmed two-browser automatic combat, deadline expiry, reload, return to planning, and final result. Phase 7 is next.
 
 ---
 
@@ -83,10 +83,9 @@ The Phase 5 frontend is available in `frontend/` (see its [setup guide](frontend
 | **2** | Backend foundation | ✅ Complete |
 | **3** | Planning & commands | ✅ Complete |
 | **4** | Worker & resolution | ✅ Complete |
-| **5** | Frontend MVP | 📝 Next |
-| **6** | Combat animation | ⏳ Planned |
-| **7** | Deploy & polish | ⏳ Planned |
-| **8** | One expansion | ⏳ Planned |
+| **5** | Frontend MVP | ✅ Complete |
+| **6** | Combat animation | ✅ Complete |
+| **7** | Deploy & polish | 📝 Next |
 
 See [ROADMAP.md](ROADMAP.md) for details on each phase.
 
@@ -99,7 +98,7 @@ React + TypeScript client
   ├─ Tailwind CSS + CSS Grid
   ├─ TanStack Query: server-state fetching
   ├─ React useState: local selection/drag
-  └─ Combat animation library: Phase 6 (choice pending)
+  └─ Combat animation: React, CSS, and shared-clock recorded-event playback
             │
             ▼
 Java / Spring Boot API
@@ -167,7 +166,7 @@ See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines on commits, PRs, c
 
 ### Replay a match (Phase 4+)
 
-Participants can page `GET /api/games/{gameId}/events?round=&afterSequence=`. Round/match summaries: `GET .../rounds/{n}/result`, `GET .../result`. Phase 6 will animate combat automatically during each round; a historical replay viewer is outside its scope.
+Participants can page `GET /api/games/{gameId}/events?round=&afterSequence=`. Round/match summaries: `GET .../rounds/{n}/result`, `GET .../result`. Phase 6 animates combat automatically during each round; a historical replay viewer is outside its scope.
 
 ### View game state (available now)
 
@@ -210,4 +209,4 @@ For questions or issues, open a GitHub issue or discussion.
 
 ---
 
-**Next step:** [Phase 6 — Automatic combat animation](ROADMAP.md#phase-6-automatic-combat-animation). See the Phase 5 verification notes above that section before final acceptance.
+**Next step:** [Phase 7 — Quality, deployment, and portfolio polish](ROADMAP.md#phase-7-quality-deployment-and-portfolio-polish).

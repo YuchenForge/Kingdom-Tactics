@@ -180,3 +180,42 @@ it('holds pre-combat Keep HP until final effects settle and restores planning wi
     expect(screen.getAllByRole('gridcell')).toHaveLength(16)
   } finally { clock.mockRestore() }
 })
+
+it.each([0, 1])('uses final server survivors after loading failure and restores planning for seat %s', seat => {
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(0)
+  try {
+    state = { ...state, yourSeat: seat, yourKeepHp: 30, opponentKeepHp: 30 }
+    update(); const view = render(page())
+    const origin = Date.parse('2026-10-07T12:00:00Z')
+    state = { ...state, state: 'ROUND_RESULT', currentRound: 1, latestResolvedRound: 1,
+      yourKeepHp: seat === 0 ? 24 : 30, opponentKeepHp: seat === 0 ? 30 : 24,
+      clockSample: { receivedAt: 0, serverAtReceipt: origin + 2999 },
+      combatPresentation: { roundNumber: 1, startsAt: new Date(origin + 1000).toISOString(), combatEndsAt: new Date(origin + 2000).toISOString(), endsAt: new Date(origin + 6000).toISOString(), tickDurationMs: 250 },
+      combatUnits: [{ id: 'old', type: 'Squire', level: 1, seat: 0, x: 0, y: 0 }] }
+    hook.combatEventsError = new Error('Download failed')
+    hook.roundResult = { roundNumber: 1, outcome: 'ENEMY_VICTORY', keepDamage: { '0': 6, '1': 0 }, keepHpAfter: { '0': 24, '1': 30 },
+      endSnapshots: { '0': { keepHp: 24, survivors: [] }, '1': { keepHp: 30, survivors: [{ id: 'survivor', type: 'Knight', level: 1, x: 2, y: 5, currentHp: 9, maxHp: 18 }] } } }
+    update(); view.rerender(page())
+    expect(screen.queryByRole('region', { name: 'Last round result' })).not.toBeInTheDocument()
+    state = { ...state, clockSample: { receivedAt: 0, serverAtReceipt: origin + 3000 } }
+    update(); view.rerender(page())
+    expect(screen.getByRole('meter', { name: 'Knight health' })).toHaveAttribute('value', '9')
+    expect(view.container.querySelector('.merged-grid img[alt="Squire"]')).toBeNull()
+    expect(screen.getByRole('region', { name: 'Last round result' })).toHaveTextContent(seat === 0 ? 'Opponent won the round' : 'You won the round')
+    expect(screen.getByRole('region', { name: 'Last round result' })).toHaveTextContent('6 Keep damage; 24 HP remaining.')
+    state = { ...state, state: 'PREPARATION', currentRound: 2, combatPresentation: null, isLocked: false,
+      planningDeadline: new Date(origin + 51000).toISOString() }
+    hook.combatEventsError = null
+    update(); view.rerender(page())
+    expect(screen.getAllByRole('gridcell')).toHaveLength(16)
+    expect(screen.getByRole('button', { name: 'Select Squire u1' })).toBeEnabled()
+    expect(view.container.querySelector('.combat-sprite')).toBeNull()
+    expect(screen.queryByRole('meter')).not.toBeInTheDocument()
+  } finally { clock.mockRestore() }
+})
+it('does not show the previous round result during the next combat', () => {
+  state = { ...state, state: 'RESOLVING', currentRound: 2 }
+  hook.roundResult = { roundNumber: 1, outcome: 'DRAW', keepDamage: { '0': 0, '1': 0 }, keepHpAfter: { '0': 20, '1': 20 }, endSnapshots: {} }
+  update(); render(page())
+  expect(screen.queryByRole('region', { name: 'Last round result' })).not.toBeInTheDocument()
+})

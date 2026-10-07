@@ -1,6 +1,8 @@
 import InterfaceIcon from '../components/InterfaceIcon'
 import PlanningTimer from '../components/PlanningTimer'
 import CombatBoard from '../components/CombatBoard'
+import RoundResultSummary from '../components/RoundResultSummary'
+import { roundResultFrame } from '../combat/roundFlow'
 import AnimatedCombatBoard from '../components/AnimatedCombatBoard'
 import type { PlanningBounds } from '../components/AnimatedCombatBoard'
 import { useLayoutEffect, useRef, useState } from 'react'
@@ -21,10 +23,14 @@ export default function GameBoardPage() {
   const state = game.state
   const playback = useCombatPlayback(state, game.combatRecording, game.roundResult)
   const result = game.roundResult
+  const currentResult = result?.roundNumber === state?.currentRound ? result : undefined
+  const showCurrentResult = state?.state === 'ROUND_RESULT' && playback.resultReady
+  const showResult = result && (showCurrentResult && !!currentResult || state?.state === 'PREPARATION' && result.roundNumber < state.currentRound)
+  const finalFrame = state && currentResult && showCurrentResult ? roundResultFrame(state.gameId, currentResult) : null
   const pageRef = useRef<HTMLElement>(null)
   const [planningBounds, setPlanningBounds] = useState<PlanningBounds>()
   const waitingForCombat = !!state && (state.state === 'LOCKED' || state.state === 'RESOLVING'
-    || (state.state === 'ROUND_RESULT' && !!state.combatPresentation && !playback.motion && !playback.error && !game.combatEventsError))
+    || (state.state === 'ROUND_RESULT' && !!state.combatPresentation && !playback.resultReady && !playback.motion && !playback.error && !game.combatEventsError))
   const showPlanning = state?.state === 'PREPARATION' || waitingForCombat
   useLayoutEffect(() => {
     if (!showPlanning) return
@@ -109,15 +115,15 @@ export default function GameBoardPage() {
     {game.isReconnecting && <p role="alert">Reconnecting… Actions are disabled until the connection recovers.</p>}
     {game.error && !game.isReconnecting && <p role="alert">{game.error instanceof ApiError ? game.error.message : 'Could not load the game.'}</p>}
     {state && <section aria-label="Game status">
-      <div className="phase-summary"><strong>{state.state === 'PREPARATION' ? 'Planning · formation' : 'Combat'}</strong><span className="phase-badge">{state.isLocked ? 'Board locked' : 'Board unlocked'}</span><span className="visually-hidden">Phase: {state.state}</span></div>
+      <div className="phase-summary"><strong>{state.state === 'PREPARATION' ? 'Planning · formation' : showCurrentResult ? 'Round result' : state.state === 'LOCKED' || state.state === 'RESOLVING' ? 'Preparing combat' : 'Combat'}</strong><span className="phase-badge">{state.isLocked ? 'Board locked' : 'Board unlocked'}</span><span className="visually-hidden">Phase: {state.state}</span></div>
       <div className="match-counters"><span><InterfaceIcon name="round" /><span>Round {state.currentRound}</span> / 8</span><span className="gold-counter"><InterfaceIcon name="gold" />{state.yourGold} gold</span>
       {game.showDeadline && <PlanningTimer key={state.planningDeadline} deadline={state.planningDeadline!} />}</div>
     </section>}
     {error && <p role="alert">{error}</p>}
     {retry && <div><button disabled={pending || !!unavailable} onClick={() => void run(retry)}>Retry same action</button><button disabled={pending} onClick={() => setRetry(null)}>Dismiss retry</button><p>The previous action may have succeeded. Retry uses its original request key.</p></div>}
     {state && !showPlanning && (state.state === 'RESOLVING' || state.state === 'ROUND_RESULT' || state.state === 'LOCKED') && (playback.motion && playback.position && displayState
-      ? <AnimatedCombatBoard key={`${state.gameId}:${state.currentRound}`} state={displayState} planningBounds={planningBounds} motion={playback.motion} elapsed={playback.elapsed} merge={playback.merge} resultReady={playback.resultReady} />
-      : <CombatBoard state={state} frame={playback.frame} playbackPhase={playback.position?.phase} />)}
+      ? <AnimatedCombatBoard key={`${state.gameId}:${state.currentRound}`} state={displayState} planningBounds={planningBounds} motion={playback.motion} elapsed={playback.elapsed} merge={playback.merge} resultReady={playback.resultReady} result={currentResult} />
+      : <CombatBoard state={state} frame={finalFrame ?? playback.frame} playbackPhase={playback.position?.phase} />)}
     {state && showPlanning && <PlanningControls state={state} selected={selected} inspected={inspection} reason={reason}
       onSelect={(unit) => setSelection({ id: unit.id, level: unit.level, gameId, round: state.currentRound })}
       onInspect={setInspection} onAction={act} onLock={() => act({ type: 'lock' })} />}
@@ -125,10 +131,8 @@ export default function GameBoardPage() {
     {game.combatEventsError && <p role="alert">Could not load combat. Live game updates continue. <button onClick={() => void game.retryCombatEvents()}>Retry combat loading</button></p>}
     {game.isResolving && <p role="status">Resolving…</p>}
     {playback.error && <p role="alert">Could not play combat. Live game updates continue.</p>}
-    {result && !(playback.presenting && result.roundNumber === state?.currentRound) && <section aria-label="Last round result"><h2>Round {result.roundNumber} result</h2>
-      <p>{result.outcome === 'DRAW' ? 'Draw' : result.outcome === 'TIME_LIMIT' ? 'Time limit reached' : (result.outcome === 'PLAYER_VICTORY') === (state?.yourSeat === 0) ? 'You won the round' : 'Opponent won the round'}</p>
-      {Object.entries(result.keepDamage).map(([seat, damage]) => <p key={seat}>{Number(seat) === state?.yourSeat ? 'You' : 'Opponent'}: {damage} Keep damage; {result.keepHpAfter[seat]} HP remaining.</p>)}
-    </section>}
+    {showResult && result && state && <RoundResultSummary result={result} seat={state.yourSeat} current={showCurrentResult} />}
+    {showCurrentResult && !currentResult && !game.roundResultError && <p role="status">Loading round outcome…</p>}
     {game.roundResultError && <p role="alert">Could not load the last round result. Live game updates continue.</p>}
   </main>
 }

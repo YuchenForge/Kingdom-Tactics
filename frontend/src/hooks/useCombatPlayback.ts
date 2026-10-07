@@ -61,7 +61,8 @@ export function useCombatPlayback(state: GameState | undefined, recording: Comba
     : null
   const elapsed = timing && sample ? serverNow(sample, Math.max(localNow, sample.receivedAt)) - Date.parse(timing.startsAt) : 0
   const resultReady = !position || position.phase === 'ended'
-    || (position.phase === 'result' && (!motion || elapsed >= motion.settleAt))
+    || (position.phase === 'result' && elapsed >= (motion?.settleAt
+      ?? Date.parse(timing!.combatEndsAt) - Date.parse(timing!.startsAt) + 1000))
   return { frame, position, error, motion: error ? null : motion, elapsed,
     merge: Math.max(0, Math.min(1, (elapsed + 1000) / 1000)), resultReady,
     // Hide this round's result until its shared result interval, including while events load.

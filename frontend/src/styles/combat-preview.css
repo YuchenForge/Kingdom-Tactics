@@ -58,3 +58,5 @@
 .motion-frame .combat-sprite .unit-level { bottom:auto; }
 
 @media(max-width:760px) { .combat-sprite .unit-level { font-size:7px; } }
+
+.motion-frame .keep-damage { display:block; min-height:18px; font-size:12px; font-weight:600; color:var(--kt-danger); }

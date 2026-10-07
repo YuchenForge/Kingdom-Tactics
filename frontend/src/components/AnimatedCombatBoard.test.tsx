@@ -59,3 +59,12 @@ it('starts from a single planning formation, shrinks it, and only then flips in 
   view.rerender(board(0, 1))
   expect(view.container.querySelector('.combat-cell')?.getAttribute('style')).toContain('rotate(0rad)')
 })
+
+it('shows authoritative Keep damage only after the final effect buffer', () => {
+  const result = { roundNumber: 1, outcome: 'TIME_LIMIT' as const, keepDamage: { '0': 6, '1': 0 }, keepHpAfter: { '0': 24, '1': 30 }, endSnapshots: {} }
+  const view = render(<AnimatedCombatBoard state={state} motion={motion} elapsed={2100} merge={1} resultReady={false} result={result} />)
+  expect(screen.queryByLabelText('Your Keep damage')).not.toBeInTheDocument()
+  view.rerender(<AnimatedCombatBoard state={{ ...state, yourKeepHp: 24 }} motion={motion} elapsed={3000} merge={1} resultReady result={result} />)
+  expect(screen.getByLabelText('Your Keep damage')).toHaveTextContent('−6 HP')
+  expect(screen.getByLabelText('Opponent Keep damage')).toHaveTextContent('No damage')
+})
