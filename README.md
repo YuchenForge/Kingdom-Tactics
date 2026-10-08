@@ -254,3 +254,30 @@ For questions or issues, open a GitHub issue or discussion.
 ---
 
 **Next step:** [Phase 7 — Quality, deployment, and portfolio polish](ROADMAP.md#phase-7-quality-deployment-and-portfolio-polish).
+
+## Multiplayer browser checks
+
+The `Multiplayer E2E` GitHub Actions workflow builds all four services against a
+fresh database, then uses two separate Chromium sessions to register, invite/join,
+recruit and deploy units, reload, lock boards, watch automatic combat, and finish
+a match. No API responses or combat recordings are mocked. Failed runs upload
+browser diagnostics and service logs; cleanup always removes the CI database.
+
+To run locally against a separate disposable stack:
+
+```bash
+KT_WEB_PORT=15173 KT_API_PORT=18080 KT_DB_PORT=15432 docker compose -p kt-e2e up --build -d --wait
+cd frontend
+npm ci
+npx playwright install chromium
+npm run test:e2e
+```
+
+The test defaults to `http://127.0.0.1:15173`; override `E2E_BASE_URL` to use another
+test stack. It creates accounts and matches, so use a disposable database. Allow up
+to 12 minutes for a complete eight-round match. Unit tests remain `npm test`.
+From the repository root, remove only this disposable stack when finished:
+
+```bash
+docker compose -p kt-e2e down --volumes
+```
