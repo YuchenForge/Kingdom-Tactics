@@ -60,16 +60,15 @@ Open **http://localhost:5173**. Use two browsers or an incognito window to regis
 separate accounts and play. No local Java, Maven, Node, or `.env` file is required.
 The first build downloads dependencies and may take several minutes.
 
-Compose starts PostgreSQL, then the API (which applies Flyway migrations), then
-the worker and frontend after the API's database-backed `/health` check passes.
+Compose starts PostgreSQL, then the combined API/worker (which applies Flyway
+migrations), then the frontend after the database-backed `/health` check passes.
 The frontend serves a production build and proxies `/api` to the API, so browser
 requests stay on the same origin. Nested page URLs also work after refresh.
-The worker has no HTTP health endpoint; `--wait` confirms it is running, while
-playing a round verifies processing.
+The combined service runs the worker jobs internally; playing a round verifies processing.
 
 ```bash
 docker compose ps
-docker compose logs -f api worker
+docker compose logs -f api
 curl --fail http://localhost:8080/health
 docker compose down
 ```
@@ -221,7 +220,7 @@ curl http://localhost:8080/api/games/{gameId}/state \
 
 ### Health checks
 
-`GET /health` reports API and database health without authentication or internal details. Compose waits for it before starting the worker and frontend.
+`GET /health` reports API and database health without authentication or internal details. Compose waits for it before starting the frontend; the worker jobs run inside the combined backend.
 
 ---
 
@@ -257,7 +256,7 @@ For questions or issues, open a GitHub issue or discussion.
 
 ## Multiplayer browser checks
 
-The `Multiplayer E2E` GitHub Actions workflow builds all four services against a
+The `Multiplayer E2E` GitHub Actions workflow builds the combined backend, frontend, and PostgreSQL against a
 fresh database, then uses two separate Chromium sessions to register, invite/join,
 recruit and deploy units, reload, lock boards, watch automatic combat, and finish
 a match. No API responses or combat recordings are mocked. Failed runs upload
@@ -287,3 +286,23 @@ docker compose -p kt-e2e down --volumes
 See [production configuration](deployment/README.md) for required environment settings,
 Vercel/Render setup, HTTPS, health checks, and the API-first migration sequence.
 Cloud deployment is a separate step. Never use Compose credentials in production.
+
+## One-service backend deployment
+
+The default Compose stack now runs API and worker jobs in **one Java process**.
+Use `backend/combined/Dockerfile` for Render. See [combined deployment](deployment/README.md#combined-service-on-render).
+API settings remain shared with the standalone API; no schema or game-rule changes
+are required. Worker services retain their own module for a future separate deployment.
+
+To run the optional original split stack instead, set the API Dockerfile explicitly:
+
+```bash
+KT_API_DOCKERFILE=api/Dockerfile docker compose --profile separate-worker up --build -d --wait
+```
+
+When switching an existing local split stack to combined mode, first stop its separate
+worker with `docker compose stop worker`, then run the normal startup command. This
+keeps one worker scheduler active. For host development, use
+`mvn -pl combined spring-boot:run` after `mvn install -DskipTests`; do not start the
+standalone API or worker alongside it. Combined configuration uses `combined.yml`,
+which imports the shared API defaults, and `combined-prod.yml` for production.

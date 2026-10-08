@@ -1,104 +1,108 @@
-# Production configuration
+# Production deployment: Vercel + Render
 
-Step 4 prepares configuration only. No cloud resources have been created and no
-real credentials are stored here. The API and worker use the existing Dockerfiles;
-the frontend is a Vite build on Vercel.
+The recommended setup is **Vercel frontend + one Render web service + PostgreSQL**.
+The Render web service runs the API and worker jobs in one Java process. No separate
+paid background worker is required. A split deployment remains available below.
 
-## Required settings
+## Combined service on Render
 
-Set **SPRING_PROFILES_ACTIVE=prod** separately on the API and worker. Do not combine
-prod with dev/test. Use `production.env.example` as a checklist, not as a deployable
-secret file. Missing datasource settings fail startup; neither service defaults to
-local database credentials in prod. The API also rejects missing/short JWT secrets,
-the known local secret, missing allowed origins, wildcards, and non-HTTPS origins.
+Update your existing API web service after committing and pushing these changes:
 
-| Setting | Service | Value |
-|---|---|---|
-| DB_URL | API + worker | JDBC URL for the same production PostgreSQL database |
-| DB_USERNAME / DB_PASSWORD | API + worker | Database credentials from Render |
-| DB_POOL_SIZE | API + worker | Defaults to 5 per process; size the total for your database connection limit |
-| JWT_SECRET | API only | A private random value, at least 32 UTF-8 bytes |
-| CORS_ALLOWED_ORIGINS | API only | Comma-separated exact HTTPS frontend origins, no trailing slash or path |
-| PORT | API only | Supplied by Render; API listens on 0.0.0.0 |
-| VITE_API_BASE_URL | Vercel build | `https://YOUR-API.onrender.com/api` |
+| Render setting | Value |
+|---|---|
+| Root Directory | `backend` |
+| Dockerfile Path | `combined/Dockerfile` |
+| Docker Build Context | `.` |
+| Health Check Path | `/health/readiness` |
+| Docker Command | Leave blank |
 
-Generate a JWT secret locally with `openssl rand -hex 32` and save it directly in
-Render's secret settings. Keep it stable across API redeployments; rotation signs
-all existing users out. Do not copy secrets into frontend variables: every `VITE_*`
-value is public in the browser bundle. Rebuild Vercel after changing its API URL.
+Keep the existing database and API hostname. Keep these environment values unchanged:
 
-Render supplies PostgreSQL URLs in `postgresql://...` form. Use
-`jdbc:postgresql://HOST:5432/DATABASE?sslmode=require`, with credentials in the two
-separate variables. Use Render's internal host when API/worker/database share a
-region. TLS is required by this example; for stronger certificate verification use
-`sslmode=verify-full` with the provider's trusted CA as appropriate. Do not paste a
-credential-bearing connection string into logs or source files.
+| Setting | Value |
+|---|---|
+| SPRING_PROFILES_ACTIVE | `prod` |
+| DB_URL | `jdbc:postgresql://HOST:5432/DATABASE?sslmode=require` |
+| DB_USERNAME / DB_PASSWORD | PostgreSQL credentials, stored only in Render |
+| JWT_SECRET | Your existing private random signing secret |
+| CORS_ALLOWED_ORIGINS | Exact HTTPS Vercel/custom-domain origins, comma-separated, no trailing slash |
+| DB_POOL_SIZE | Optional; defaults to 5 connections shared by API and jobs |
+| PORT | Supplied by Render |
 
-## Render services (configure during Step 5)
+Leave `SPRING_CONFIG_NAME` unset: the combined entry point selects `combined.yml`.
+Leave `APP_WORKER_ENABLED` unset or true. The combined configuration imports the API's
+shared settings, retaining security, migration validation, and production checks.
+Two scheduler threads allow planning deadlines and battle processing to progress
+independently. The standalone worker application and its security exclusions are
+not loaded. API and worker services share one connection pool and clock.
 
-- API: Docker web service, repository root directory, Docker context `./backend`,
-  Dockerfile `./backend/api/Dockerfile`. Use `/health/readiness` as the health-check
-  path. Leave Docker start command at its default.
-- Worker: Docker **background worker**, same context, Dockerfile
-  `./backend/worker/Dockerfile`. It has no HTTP listener or HTTP health check.
-- PostgreSQL: same region as both services, with backups appropriate to saved games.
-- Initially use one API and one worker instance. Deploy them from the same commit.
-  Keep automatic independent deployments off until coordinated releases are set up.
+Use `production.env.example` only as a checklist. Missing settings fail startup;
+production rejects short/known local JWT secrets and non-HTTPS or wildcard origins.
+Generate a new secret with `openssl rand -hex 32` only for a new deployment; changing
+the existing secret invalidates current login tokens. Never put real secrets in Git
+or a `VITE_*` variable. Use Render's internal PostgreSQL hostname in the same region;
+keep credentials separate from the JDBC URL. The example requires database TLS;
+`sslmode=verify-full` with a trusted provider CA can additionally verify the server.
 
-Render terminates public HTTPS and forwards HTTP to the container. The API honors
-forwarded headers in prod; only run this setting behind the trusted platform proxy.
-Use the HTTPS API hostname in the frontend. Do not configure application certificates
-or expose the container port directly to the internet. Platform HTTPS redirects and
-certificates must be verified after deploying; they cannot be checked locally.
+## Release order and switching from separate services
 
-## Vercel frontend
+1. Keep the existing PostgreSQL database and its data. Back it up before schema changes.
+2. If a separate worker is running, stop it during the switch. Do not run both
+   deployment modes together. Rounds remain persisted while processing is stopped.
+3. Deploy the combined image to the existing API web service. Flyway applies pending
+   migrations before schema validation and before scheduled jobs start.
+4. Wait for `/health/readiness` to return HTTP 200 and `{"status":"UP"}`.
+5. Play a complete match from two browsers to verify embedded worker processing.
 
-Choose `frontend` as the Vercel project root, Vite as the framework, Node 22, install
-command `npm ci`, and set `VITE_API_BASE_URL` for the production environment. The
-checked-in `frontend/vercel.json` builds `dist` and handles nested SPA routes such as
-join links and game pages on refresh. Browser API requests go directly to Render.
-Set the stable Vercel/custom-domain origin in the API's CORS allowlist. Arbitrary
-preview URLs are not allowed; add a specific HTTPS preview origin only when needed.
-The CORS policy allows GET/POST/OPTIONS and Authorization, Content-Type, and
-Idempotency-Key headers. It does not enable cross-site cookies.
+No new migrations or account resets are required by the combined-service change.
+The API URL stays unchanged, so an already configured Vercel frontend needs no URL
+change. For a first deployment, configure Vercel as described below.
 
-## Migration and release order
+Flyway clean is disabled and baseline-on-migrate is false. Never edit already-applied
+migrations or bypass a checksum error by cleaning/baselining production. Use additive
+migrations compatible with old instances during rollout; a code rollback does not
+undo a database migration. No separate pre-deploy command is needed for the current
+startup migration approach.
 
-1. Provision PostgreSQL and set the production environment values.
-2. Deploy the API first. Flyway applies pending versioned migrations before Hibernate
-   validates the schema and readiness becomes UP. The API is the migration owner.
-   Flyway clean is disabled and baseline-on-migrate is false.
-3. Wait for `/health/readiness` to return HTTP 200 and `{"status":"UP"}`.
-4. Deploy/restart the worker from the same commit. It never migrates; it validates
-   schema on startup and exits if the schema is missing or incompatible. Check the
-   worker startup logs, then verify that a locked round resolves.
-5. Deploy the frontend and run the two-player live smoke check.
+## Vercel and HTTPS
 
-For later schema changes, take a backup and use additive migrations compatible
-with the old running API/worker during rollout. Do not edit already-applied migration
-files, enable clean/baseline to bypass errors, or assume rolling back application
-code reverses a database migration. A destructive schema change needs a separate
-maintenance/recovery plan. A schema mismatch must stop the rollout for investigation.
-No pre-deploy command is needed for this initial API-owned migration approach.
+Set the Vercel root directory to `frontend`, framework to Vite, Node to 22, and install
+command to `npm ci`. The checked-in `vercel.json` builds `dist` and handles nested
+routes on refresh. Set `VITE_API_BASE_URL=https://YOUR-API.onrender.com/api` for the
+production build and redeploy when it changes. This value is public, not a secret.
+Browser API requests go directly to Render; the stable frontend origin must match
+the CORS allowlist. Arbitrary preview domains are not allowed.
 
-## Health and readiness
+Render terminates HTTPS and forwards HTTP to the container. The prod profile honors
+forwarded headers, so use it only behind the trusted hosting proxy. Verify public
+HTTPS after deployment; do not expose the container directly or add certificates
+inside the application.
 
-- `/health/readiness`: process readiness **and database connectivity**, returns 503
-  when unavailable. Use this for deploy routing.
-- `/health/liveness`: application process state only; a database outage does not
-  imply the process is dead.
-- `/health`: aggregate health, retained for local Compose compatibility.
+## Health and operational limits
 
-These endpoints are public but expose no database details. The aggregate endpoint
-also lists the available probe group names. Other
-Actuator endpoints remain unexposed/protected. Readiness does not verify worker
-progress: use worker logs and a resolved round for that check. A database outage
-makes the API unready; restoration should return it to UP without a new deployment.
+- `/health/readiness` checks process readiness and PostgreSQL connectivity; database
+  outages return 503 and recovery returns UP.
+- `/health/liveness` checks process state independently of database connectivity.
+- `/health` is the aggregate endpoint used by local Compose.
 
-## Reference documentation
+Health endpoints expose status and probe-group names, not database internals.
+Readiness does not prove that combat jobs are progressing; a played round does.
+One process means shared CPU and memory. Start with one instance and inspect resource
+usage during actual matches. If hosting suspends it, both API and jobs pause until
+it resumes; this does not provide an always-on guarantee.
 
-- [Render Docker builds](https://render.com/docs/docker)
+## Optional separate deployment
+
+The original modules still work independently. Use the same Render root `backend`
+and Docker build context `.` with `api/Dockerfile` for the API web service and
+`worker/Dockerfile` for a background worker. Deploy the API first, wait for readiness,
+then deploy the worker from the same commit. Both need prod/database settings; only
+the API needs JWT/CORS values. The standalone worker has no HTTP health endpoint.
+The worker's executable artifact now has a `-boot.jar` suffix; its thin jar is used
+as a dependency by the combined module.
+
+## References
+
+- [Render Docker](https://render.com/docs/docker)
+- [Render root-relative paths](https://render.com/docs/monorepo-support)
 - [Render health checks](https://render.com/docs/health-checks)
-- [Render deployments](https://render.com/docs/deploys)
-- [Vercel Vite deployments](https://vercel.com/docs/frameworks/frontend/vite)
-- [Spring Boot health endpoints](https://docs.spring.io/spring-boot/reference/actuator/endpoints.html)
+- [Vercel Vite](https://vercel.com/docs/frameworks/frontend/vite)

@@ -19,7 +19,7 @@ services:
   api:
     build:
       context: ./backend
-      dockerfile: api/Dockerfile
+      dockerfile: ${KT_API_DOCKERFILE:-combined/Dockerfile}
     environment:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/kingdom_tactics
@@ -39,6 +39,7 @@ services:
       start_period: 30s
 
   worker:
+    profiles: [separate-worker]
     build:
       context: ./backend
       dockerfile: worker/Dockerfile

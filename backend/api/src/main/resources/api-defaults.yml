@@ -1,0 +1,79 @@
+spring:
+  application:
+    name: kingdom-tactics-api
+  profiles:
+    active: dev
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-change-in-production!}
+    expiration-ms: 86400000
+  scheduling:
+    enabled: true
+    planning-deadline-ms: 10000
+
+logging:
+  level:
+    com.kingdom: DEBUG
+  pattern:
+    console: "%d{ISO8601} %-5level [%thread] %logger{36} requestId=%X{requestId} userId=%X{userId} gameId=%X{gameId} - %msg%n"
+
+---
+# dev — local Docker Postgres
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kingdom_tactics
+    username: kingdom_user
+    password: kingdom_password
+  jpa:
+    hibernate:
+      ddl-auto: validate   # Flyway owns schema
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+---
+# test — Testcontainers overrides datasource in @DynamicPropertySource
+spring:
+  config:
+    activate:
+      on-profile: test
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+app:
+  scheduling:
+    enabled: false

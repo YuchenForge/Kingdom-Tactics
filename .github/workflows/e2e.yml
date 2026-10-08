@@ -41,7 +41,7 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Build and start full stack with a fresh database
+      - name: Build combined API/worker and frontend with a fresh database
         run: docker compose up --build -d --wait --wait-timeout 180
       - name: Test two-player browser flow
         working-directory: frontend

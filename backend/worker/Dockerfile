@@ -6,9 +6,10 @@ COPY pom.xml .
 COPY engine ./engine
 COPY api ./api
 COPY worker ./worker
+COPY combined ./combined
 RUN mvn -pl worker -am package -DskipTests -q
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-COPY --from=build /build/worker/target/kingdom-tactics-worker-0.1.0.jar app.jar
+COPY --from=build /build/worker/target/kingdom-tactics-worker-0.1.0-boot.jar app.jar
 ENTRYPOINT ["java", "-jar", "app.jar"]

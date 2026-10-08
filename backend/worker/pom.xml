@@ -83,6 +83,7 @@
                 </executions>
                 <configuration>
                     <mainClass>com.kingdom.worker.WorkerApplication</mainClass>
+                    <classifier>boot</classifier>
                 </configuration>
             </plugin>
         </plugins>

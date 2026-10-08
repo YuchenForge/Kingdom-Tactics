@@ -1,0 +1,12 @@
+spring:
+  config:
+    import: classpath:api-defaults.yml
+  task:
+    scheduling:
+      pool:
+        size: 2
+
+app:
+  worker:
+    enabled: true
+    poll-ms: 1000

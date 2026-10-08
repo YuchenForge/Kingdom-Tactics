@@ -17,6 +17,7 @@
         <module>engine</module>
         <module>api</module>
         <module>worker</module>
+        <module>combined</module>
     </modules>
 
     <properties>
