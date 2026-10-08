@@ -29,6 +29,7 @@ public class SecurityConfig {
             JsonAuthenticationEntryPoint authenticationEntryPoint,
             JsonAccessDeniedHandler accessDeniedHandler) throws Exception {
         http
+                .cors(cors -> {})
                 // CSRF protects cookie-based sessions; this API is JWT/stateless, so disable it
                 .csrf(csrf -> csrf.disable())
                 // No server-side login session — each request carries its own JWT
@@ -36,6 +37,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/health",
+                                "/health/readiness",
+                                "/health/liveness",
                                 "/api/auth/register",
                                 "/api/auth/login"
                         ).permitAll()

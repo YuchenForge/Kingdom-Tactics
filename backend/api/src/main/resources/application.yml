@@ -16,6 +16,14 @@ management:
   endpoint:
     health:
       show-details: never
+      show-components: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
 
 app:
   jwt:

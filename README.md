@@ -281,3 +281,9 @@ From the repository root, remove only this disposable stack when finished:
 ```bash
 docker compose -p kt-e2e down --volumes
 ```
+
+## Production preparation
+
+See [production configuration](deployment/README.md) for required environment settings,
+Vercel/Render setup, HTTPS, health checks, and the API-first migration sequence.
+Cloud deployment is a separate step. Never use Compose credentials in production.
