@@ -58,6 +58,13 @@ desktop.ini
 # Test
 test-results/
 
-# Docs
-docs/
+# Working notes kept off the public repo
+docs/IMPLEMENTATION.md
+docs/FILE_GUIDE.md
+docs/EXPANSION_ROADMAP.md
+docs/UNIT_ROSTER_PROPOSAL.md
+docs/art/
+docs/adr/
+docs/images/*
+!docs/images/landing.png
 backend/docs/

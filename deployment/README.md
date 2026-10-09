@@ -1,12 +1,14 @@
 # Production deployment: Vercel + Render
 
-The recommended setup is **Vercel frontend + one Render web service + PostgreSQL**.
-The Render web service runs the API and worker jobs in one Java process. No separate
-paid background worker is required. A split deployment remains available below.
+The live game is [https://kingdom-tactics.vercel.app](https://kingdom-tactics.vercel.app).
+
+The deployed topology is **Vercel frontend + one Render web service + PostgreSQL**.
+The Render web service runs the API and worker jobs in one Java process. The combined topology does not require a separate
+background worker service. A split deployment remains available below.
 
 ## Combined service on Render
 
-Update your existing API web service after committing and pushing these changes:
+Configure the web service to build from the repository:
 
 | Render setting | Value |
 |---|---|
@@ -16,14 +18,14 @@ Update your existing API web service after committing and pushing these changes:
 | Health Check Path | `/health/readiness` |
 | Docker Command | Leave blank |
 
-Keep the existing database and API hostname. Keep these environment values unchanged:
+Set the following environment values. For an existing deployment, preserve the database, API hostname, and signing secret:
 
 | Setting | Value |
 |---|---|
 | SPRING_PROFILES_ACTIVE | `prod` |
 | DB_URL | `jdbc:postgresql://HOST:5432/DATABASE?sslmode=require` |
 | DB_USERNAME / DB_PASSWORD | PostgreSQL credentials, stored only in Render |
-| JWT_SECRET | Your existing private random signing secret |
+| JWT_SECRET | Private random signing secret (preserve it across redeployments) |
 | CORS_ALLOWED_ORIGINS | Exact HTTPS Vercel/custom-domain origins, comma-separated, no trailing slash |
 | DB_POOL_SIZE | Optional; defaults to 5 connections shared by API and jobs |
 | PORT | Supplied by Render |
@@ -53,9 +55,10 @@ keep credentials separate from the JDBC URL. The example requires database TLS;
 4. Wait for `/health/readiness` to return HTTP 200 and `{"status":"UP"}`.
 5. Play a complete match from two browsers to verify embedded worker processing.
 
-No new migrations or account resets are required by the combined-service change.
-The API URL stays unchanged, so an already configured Vercel frontend needs no URL
-change. For a first deployment, configure Vercel as described below.
+Switching to the combined entry point does not require an account reset. Deploying
+a newer commit can still apply pending migrations. If the API hostname stays the
+same, the frontend API URL needs no change. For a first deployment, configure
+Vercel as described below.
 
 Flyway clean is disabled and baseline-on-migrate is false. Never edit already-applied
 migrations or bypass a checksum error by cleaning/baselining production. Use additive
